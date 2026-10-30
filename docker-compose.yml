@@ -1,0 +1,10 @@
+# Used from Step 6 (load testing). Then: DATABASE_URL=postgresql+psycopg://asr:asr@localhost:5432/asr
+services:
+  postgres:
+    image: postgres:16
+    command: postgres -c max_connections=200
+    environment: {POSTGRES_USER: asr, POSTGRES_PASSWORD: asr, POSTGRES_DB: asr}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+volumes:
+  pgdata:
