@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.repositories import AudioRepo, RunRepo
+from app.evaluation.service import evaluate_run
 from app.pipeline.registry import ModelRegistry
 from app.storage.base import StorageBackend
 
@@ -42,6 +43,19 @@ class RunProcessor:
             s.commit()
             if not applied:
                 log.warning("run %s changed state while processing; this result was discarded", run_id)
+                return
+            self._evaluate(s, run_id)
+
+    @staticmethod
+    def _evaluate(s: Session, run_id: str) -> None:
+        """Score the run if its audio has a reference. A scoring problem must never undo a finished run."""
+        try:
+            if evaluate_run(s, run_id):
+                s.commit()
+        except Exception:  # noqa: BLE001
+            s.rollback()
+            log.exception("evaluation of run %s failed (the run itself is done)", run_id)
+
 
 class InProcessQueue:
     """Thread pool for now. Same `enqueue(run_id)` interface a Celery/Redis queue will implement."""
