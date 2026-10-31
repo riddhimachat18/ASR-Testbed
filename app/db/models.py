@@ -78,7 +78,8 @@ class TranscriptionRun(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     audio_id: Mapped[str] = mapped_column(ForeignKey("audio.id"), index=True)
     model_version: Mapped[str] = mapped_column(String(100))
-    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)  # fully resolved RunConfig
+    config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # NULL = legacy run
     status: Mapped[RunStatus] = mapped_column(
         Enum(RunStatus, native_enum=False, length=20), default=RunStatus.queued, index=True
     )

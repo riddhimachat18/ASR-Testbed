@@ -48,6 +48,8 @@ def submit_audio(
         raise HTTPException(422, f"Could not decode audio: {e}")
     except svc.UnknownModel as e:
         raise HTTPException(422, f"Unknown model_version: {e}")
+    except svc.InvalidConfig as e:
+        raise HTTPException(422, e.errors)
     request.app.state.queue.enqueue(run.id)  # after commit so the worker can see the row
     return SubmitResponse(audio_id=audio.id, run_id=run.id, status=run.status.value)
 
@@ -56,7 +58,7 @@ def _status_payload(run) -> RunStatusResponse:
     return RunStatusResponse(
         id=run.id, audio_id=run.audio_id, model_version=run.model_version,
         status=run.status.value, error=run.error, latency=run.latency, created_at=run.created_at,
-        wer=run.wer, cer=run.cer,
+        wer=run.wer, cer=run.cer, config_hash=run.config_hash, config=run.config,
     )
 
 
@@ -97,3 +99,15 @@ def dataset_leaderboard(name: str, user: User = Depends(get_current_user), db=De
     if rows is None:
         raise HTTPException(404, "Dataset not found")
     return rows
+
+
+@router.get("/config/schema")
+def config_schema(request: Request, user: User = Depends(get_current_user)):
+    """Everything a client may put in `config`: defaults, JSON schema, and per-model options."""
+    from app.pipeline.run_config import RunConfig
+    reg = request.app.state.registry
+    return {
+        "defaults": RunConfig().model_dump(mode="json"),
+        "json_schema": RunConfig.model_json_schema(),
+        "models": {n: reg.options_model(n).model_json_schema() for n in reg.names()},
+    }

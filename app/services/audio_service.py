@@ -11,6 +11,7 @@ from app.db.models import Audio, Dataset, ReferenceTranscript, TranscriptionRun,
 from app.evaluation.service import evaluate_audio_runs
 from app.db.repositories import AudioRepo, RunRepo
 from app.pipeline.registry import ModelRegistry
+from app.pipeline.run_config import ConfigInvalid, resolve_run_config
 from app.storage.base import StorageBackend
 from app.storage.keys import new_audio_key
 
@@ -22,6 +23,12 @@ class UnsupportedFormat(ServiceError): ...
 class InvalidAudio(ServiceError): ...
 class UploadTooLarge(ServiceError): ...
 class UnknownModel(ServiceError): ...
+
+
+class InvalidConfig(ServiceError):
+    def __init__(self, errors: list[dict]):
+        super().__init__(errors)
+        self.errors = errors
 class NotFound(ServiceError): ...
 class NotReady(ServiceError): ...
 
@@ -53,6 +60,11 @@ class AudioService:
             raise UnsupportedFormat(f"extension {ext!r} not in {sorted(ALLOWED_EXTENSIONS)}")
         if model_version not in self.registry.names():
             raise UnknownModel(model_version)
+        try:  # validate before anything is stored
+            resolved_config, cfg_hash = resolve_run_config(
+                model_version, config, self.registry.options_model(model_version))
+        except ConfigInvalid as e:
+            raise InvalidConfig(e.errors) from e
 
         key = new_audio_key(ext)
         blob = self.storage.save_audio(key, _LimitedStream(stream, self.settings.max_upload_bytes))
@@ -70,7 +82,7 @@ class AudioService:
         )
         if reference_text is not None:
             self.s.add(ReferenceTranscript(audio_id=audio.id, text=reference_text))
-        run = self.run_repo.add(audio.id, model_version, config)
+        run = self.run_repo.add(audio.id, model_version, resolved_config, config_hash=cfg_hash)
         self.s.commit()
         return audio, run
 

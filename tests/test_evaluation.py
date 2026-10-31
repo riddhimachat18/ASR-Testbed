@@ -111,7 +111,7 @@ def test_same_dataset_name_is_reused_not_duplicated(client, make_user):
 def test_scoring_failure_never_undoes_a_finished_run(client, make_user, monkeypatch):
     import app.pipeline.worker as worker
     def boom(*a, **k): raise RuntimeError("scorer exploded")
-    monkeypatch.setattr(worker, "evaluate_run", boom)
+    monkeypatch.setattr(worker, "score_text", boom)
     _, key = make_user("alice")
     run = _wait_done(client, key, _post(client, key, reference="x")["run_id"])
     assert run["status"] == "done" and run["wer"] is None

@@ -57,8 +57,10 @@ class RunRepo:
     def __init__(self, s: Session):
         self.s = s
 
-    def add(self, audio_id: str, model_version: str, config: dict) -> TranscriptionRun:
-        run = TranscriptionRun(audio_id=audio_id, model_version=model_version, config=config)
+    def add(self, audio_id: str, model_version: str, config: dict,
+            config_hash: str | None = None) -> TranscriptionRun:
+        run = TranscriptionRun(audio_id=audio_id, model_version=model_version, config=config,
+                               config_hash=config_hash)
         self.s.add(run)
         self.s.flush()
         return run
@@ -88,13 +90,15 @@ class RunRepo:
         )
         return res.rowcount == 1
 
-    def complete(self, run_id: str, transcript: str, latency: float) -> bool:
-        """Atomic processing->done. Returns False (and writes nothing) if the run is no longer
+    def complete(self, run_id: str, transcript: str, latency: float, scores: dict | None = None) -> bool:
+        """Atomic processing->done, with scores (wer, cer, metrics) in the same statement so that a client
+        never sees 'done' without them. Returns False (and writes nothing) if the run is no longer
         'processing', e.g. another worker already finished it. First writer wins."""
+        extra = {"wer": scores["wer"], "cer": scores["cer"], "metrics": scores["metrics"]} if scores else {}
         res = self.s.execute(
             update(TranscriptionRun)
             .where(TranscriptionRun.id == run_id, TranscriptionRun.status == RunStatus.processing)
-            .values(status=RunStatus.done, transcript=transcript, latency=latency)
+            .values(status=RunStatus.done, transcript=transcript, latency=latency, **extra)
         )
         return res.rowcount == 1
 
