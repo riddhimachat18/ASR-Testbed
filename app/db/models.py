@@ -61,6 +61,10 @@ class TranscriptionRun(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     latency: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # queue bookkeeping (Part E)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    enqueued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=_now)
 
     audio: Mapped[Audio] = relationship(back_populates="runs")
 

@@ -26,7 +26,8 @@ def make_wav(seconds: float = 1.0, rate: int = 44100) -> bytes:
 @pytest.fixture
 def settings(tmp_path):
     return Settings(data_root=str(tmp_path / "blobs"), database_url=f"sqlite:///{tmp_path/'t.db'}",
-                    stub_sleep_seconds=0.05, worker_threads=4, max_upload_bytes=5_000_000)
+                    stub_sleep_seconds=0.05, worker_threads=4, max_upload_bytes=5_000_000,
+                    recovery_interval_s=0)
 
 
 @pytest.fixture

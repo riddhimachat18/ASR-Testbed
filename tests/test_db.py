@@ -53,6 +53,7 @@ def test_one_audio_many_runs(session):
     session.commit()
     assert len(session.get(Audio, run.audio_id).runs) == 2
 
+
 def test_complete_and_fail_are_guarded_first_writer_wins(session):
     _, _, run = _run(session)
     session.commit()

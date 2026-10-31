@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -82,10 +83,11 @@ class RunRepo:
         res = self.s.execute(
             update(TranscriptionRun)
             .where(TranscriptionRun.id == run_id, TranscriptionRun.status == RunStatus.queued)
-            .values(status=RunStatus.processing)
+            .values(status=RunStatus.processing, started_at=datetime.now(timezone.utc),
+                    attempts=TranscriptionRun.attempts + 1)
         )
         return res.rowcount == 1
-    
+
     def complete(self, run_id: str, transcript: str, latency: float) -> bool:
         """Atomic processing->done. Returns False (and writes nothing) if the run is no longer
         'processing', e.g. another worker already finished it. First writer wins."""
