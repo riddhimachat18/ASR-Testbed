@@ -5,8 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.repositories import AudioRepo, RunRepo
-from app.evaluation.service import evaluate_run
+from app.evaluation.service import score_text
 from app.pipeline.registry import ModelRegistry
+from app.pipeline.run_config import RunConfig
 from app.storage.base import StorageBackend
 
 log = logging.getLogger("worker")
@@ -31,11 +32,13 @@ class RunProcessor:
                 run = runs.get(run_id)
                 audio = AudioRepo(s).get(run.audio_id)
                 wrapper = self.registry.get(run.model_version)
-                storage_key, cfg = audio.storage_key, run.config or {}
+                cfg = RunConfig.model_validate(run.config or {})  # {} (legacy rows) = all defaults
+                storage_key, audio_id = audio.storage_key, audio.id
                 s.commit()  # release the DB connection while the (slow) model runs
                 with self.storage.get_audio(storage_key) as stream:
                     text = wrapper.transcribe(stream, cfg)
-                applied = runs.complete(run_id, text, time.perf_counter() - start)
+                scores = self._score(s, audio_id, text)
+                applied = runs.complete(run_id, text, time.perf_counter() - start, scores)
             except Exception as e:  # noqa: BLE001
                 s.rollback()
                 log.exception("run %s failed", run_id)
@@ -43,18 +46,17 @@ class RunProcessor:
             s.commit()
             if not applied:
                 log.warning("run %s changed state while processing; this result was discarded", run_id)
-                return
-            self._evaluate(s, run_id)
 
     @staticmethod
-    def _evaluate(s: Session, run_id: str) -> None:
-        """Score the run if its audio has a reference. A scoring problem must never undo a finished run."""
+    def _score(s: Session, audio_id: str, text: str) -> dict | None:
+        """Best effort: a scoring problem must never stop the run from finishing.
+        (scripts.evaluate can score it later.)"""
         try:
-            if evaluate_run(s, run_id):
-                s.commit()
+            return score_text(s, audio_id, text)
         except Exception:  # noqa: BLE001
             s.rollback()
-            log.exception("evaluation of run %s failed (the run itself is done)", run_id)
+            log.exception("scoring failed for audio %s; the run is stored unscored", audio_id)
+            return None
 
 
 class InProcessQueue:

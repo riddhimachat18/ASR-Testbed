@@ -62,7 +62,7 @@ def test_result_not_ready_is_409(client, make_user, settings):
 
 def test_failure_path(client, make_user):
     _, key = make_user("alice")
-    run_id = _post(client, key, config='{"force_error": true}').json()["run_id"]
+    run_id = _post(client, key, config='{"model_options": {"force_error": true}}').json()["run_id"]
     r = _wait(client, key, run_id)
     assert r["status"] == "failed" and "forced stub failure" in r["error"]
 

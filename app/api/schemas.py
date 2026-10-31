@@ -19,6 +19,8 @@ class RunStatusResponse(BaseModel):
     created_at: datetime
     wer: float | None = None
     cer: float | None = None
+    config_hash: str | None = None
+    config: dict | None = None
 
 
 class ResultResponse(BaseModel):
@@ -43,6 +45,8 @@ class ReferenceResponse(BaseModel):
 
 class LeaderboardRow(BaseModel):
     model_version: str
+    config_hash: str | None
+    config: dict | None
     runs: int
     audio_files: int
     ref_words: int
