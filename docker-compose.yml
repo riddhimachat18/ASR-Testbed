@@ -1,4 +1,5 @@
-# Used from Step 6 (load testing). Then: DATABASE_URL=postgresql+psycopg://asr:asr@localhost:5432/asr
+# Postgres from Step 6, Redis from Part E.
+# Then: DATABASE_URL=postgresql+psycopg://asr:asr@localhost:5432/asr  QUEUE_BACKEND=celery
 services:
   postgres:
     image: postgres:16
@@ -6,5 +7,12 @@ services:
     environment: {POSTGRES_USER: asr, POSTGRES_PASSWORD: asr, POSTGRES_DB: asr}
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
+  redis:
+    image: redis:7
+    # appendonly: queued jobs survive a Redis restart too, not just a worker crash
+    command: redis-server --appendonly yes
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
 volumes:
   pgdata:
+  redisdata:
