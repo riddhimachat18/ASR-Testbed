@@ -12,8 +12,10 @@ Reliability model:
 import logging
 
 from celery import Celery
+from celery.signals import setup_logging
 
 from app.config import get_settings
+from app.observability.logging import configure_logging
 from app.runtime import Runtime, build_runtime
 
 log = logging.getLogger("celery_app")
@@ -32,6 +34,12 @@ celery_app.conf.update(
     broker_transport_options={"visibility_timeout": settings.visibility_timeout_s},
     broker_connection_retry_on_startup=True,
 )
+
+@setup_logging.connect
+def _configure_worker_logging(**_):
+    """Take over Celery's logging so worker lines are the same JSON (with run_id) as the API's."""
+    configure_logging(settings.log_level, settings.log_format)
+
 
 _runtime: Runtime | None = None
 

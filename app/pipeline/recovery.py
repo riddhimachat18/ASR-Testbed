@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 
 from app.config import Settings
 from app.db.models import RunStatus, TranscriptionRun as Run
+from app.observability.logging import log_event
 
 log = logging.getLogger("recovery")
 
@@ -80,7 +81,8 @@ def recover_runs(session_factory, queue, cfg: RecoveryConfig, now: datetime | No
     for run_id in to_enqueue:  # after commit
         queue.enqueue(run_id)
     if to_enqueue or report.failed_exhausted:
-        log.warning("recovery: %s", report)
+        log_event(log, "recovery.sweep", level=logging.WARNING, requeued_stuck=report.requeued_stuck,
+                  failed_exhausted=report.failed_exhausted, reenqueued_orphans=report.reenqueued_orphans)
     return report
 
 

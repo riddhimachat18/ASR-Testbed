@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import BinaryIO, Iterator
 
 from .base import (BlobExistsError, BlobInfo, BlobNotFoundError,
-                   InvalidKeyError, StorageBackend)
+                   InvalidKeyError, StorageBackend, validate_key)
 
 TMP_SUFFIX = ".tmp"
 
@@ -16,8 +16,7 @@ class LocalDiskStorage(StorageBackend):
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
-        if not key or key.startswith("/") or "\\" in key:
-            raise InvalidKeyError(key)
+        validate_key(key)
         p = (self.root / key).resolve()
         if self.root not in p.parents:  # blocks ../ traversal
             raise InvalidKeyError(key)

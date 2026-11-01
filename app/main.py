@@ -4,6 +4,8 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.config import Settings, get_settings
+from app.observability.logging import configure_logging
+from app.observability.middleware import RequestLogMiddleware
 from app.pipeline.queues import build_queue
 from app.pipeline.recovery import RecoveryConfig, RecoverySweeper, recover_runs
 from app.runtime import build_runtime
@@ -11,6 +13,7 @@ from app.runtime import build_runtime
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    configure_logging(settings.log_level, settings.log_format)
     rt = build_runtime(settings)
     queue = build_queue(settings, rt)
     cfg = RecoveryConfig.from_settings(settings)
@@ -28,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings, app.state.engine = settings, rt.engine
     app.state.session_factory, app.state.storage = rt.session_factory, rt.storage
     app.state.registry, app.state.queue = rt.registry, queue
+    app.add_middleware(RequestLogMiddleware)
     app.include_router(router)
     return app
 

@@ -1,8 +1,12 @@
+import hmac
 import json
+import logging
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 
 from app.db.models import User
+from app.observability.logging import log_event
+from app.observability.metrics import collect_metrics
 from app.services import audio_service as svc
 
 from .deps import get_current_user, get_service
@@ -13,6 +17,7 @@ from .schemas import (LeaderboardRow, ReferenceBody, ReferenceResponse, ResultRe
                       RunStatusResponse, SubmitResponse)
 
 router = APIRouter()
+log = logging.getLogger("api")
 
 
 @router.get("/healthz")
@@ -51,6 +56,9 @@ def submit_audio(
     except svc.InvalidConfig as e:
         raise HTTPException(422, e.errors)
     request.app.state.queue.enqueue(run.id)  # after commit so the worker can see the row
+    log_event(log, "run.submitted", run_id=run.id, audio_id=audio.id, model_version=model_version,
+              config_hash=run.config_hash, size_bytes=audio.size_bytes, duration_s=round(audio.duration, 2),
+              dataset=dataset, user_id=user.id)
     return SubmitResponse(audio_id=audio.id, run_id=run.id, status=run.status.value)
 
 
@@ -111,3 +119,13 @@ def config_schema(request: Request, user: User = Depends(get_current_user)):
         "json_schema": RunConfig.model_json_schema(),
         "models": {n: reg.options_model(n).model_json_schema() for n in reg.names()},
     }
+
+
+@router.get("/metrics", include_in_schema=False)
+def metrics(request: Request, authorization: str | None = Header(default=None)):
+    """Prometheus text format: runs by status/model, age of the oldest queued run, broker queue length."""
+    token = request.app.state.settings.metrics_token
+    if token and not hmac.compare_digest(authorization or "", f"Bearer {token}"):
+        raise HTTPException(401, "Missing or invalid metrics token")
+    body = collect_metrics(request.app.state.session_factory, request.app.state.queue)
+    return Response(body, media_type="text/plain; version=0.0.4; charset=utf-8")

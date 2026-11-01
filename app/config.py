@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,14 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     db_pool_timeout: int = 30
 
+    # --- S3 / MinIO (used when STORAGE_BACKEND=s3) ---
+    s3_bucket: str = "asr-audio"
+    s3_endpoint_url: str | None = None  # e.g. http://localhost:9000 for MinIO; unset for AWS
+    s3_region: str = "us-east-1"
+    s3_access_key_id: str | None = None  # unset = AWS default credential chain (env vars, instance role, ...)
+    s3_secret_access_key: str | None = None
+    s3_prefix: str = ""  # lets several environments share one bucket
+
     # --- queue (Part E) ---
     queue_backend: str = "inprocess"  # "inprocess" | "celery"
     redis_url: str = "redis://localhost:6379/0"
@@ -28,6 +37,11 @@ class Settings(BaseSettings):
     task_soft_time_limit_s: int = 600  # task gets SoftTimeLimitExceeded -> run is marked failed cleanly
     task_hard_margin_s: int = 60  # hard kill = soft + margin
     visibility_timeout_s: int = 3600  # Redis redelivers unacked messages after this
+
+    # --- observability ---
+    log_level: str = "INFO"
+    log_format: Literal["json", "text"] = "json"
+    metrics_token: str | None = None  # if set, /metrics requires "Authorization: Bearer <token>"
 
     # --- recovery sweep ---
     recovery_interval_s: int = 120  # 0 disables the background sweep

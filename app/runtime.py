@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.db.session import make_engine, make_session_factory
+from app.pipeline.prepare import AudioPreparer
 from app.pipeline.registry import ModelRegistry
 from app.pipeline.worker import RunProcessor
 from app.storage.base import StorageBackend
@@ -32,4 +33,4 @@ def build_runtime(settings: Settings, pool_size: int | None = None, max_overflow
     sf = make_session_factory(engine)
     storage = get_storage(settings)
     registry = ModelRegistry(settings)
-    return Runtime(settings, engine, sf, storage, registry, RunProcessor(sf, storage, registry))
+    return Runtime(settings, engine, sf, storage, registry, RunProcessor(sf, storage, registry, AudioPreparer(storage)))
