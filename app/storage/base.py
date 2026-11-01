@@ -36,3 +36,14 @@ class StorageBackend(ABC):
     @abstractmethod
     def delete(self, key: str) -> bool:
         """Returns True if something was deleted."""
+
+
+def validate_key(key: str) -> str:
+    """One key contract for every backend, so a key valid on disk is valid in S3 and vice versa.
+    Keys are relative, '/'-separated, with no empty, '.' or '..' segments, no backslashes or control characters."""
+    if (not key or len(key.encode("utf-8", "replace")) > 1024 or key.startswith("/") or "\\" in key
+            or any(ord(c) < 32 for c in key)):
+        raise InvalidKeyError(key)
+    if any(part in ("", ".", "..") for part in key.split("/")):
+        raise InvalidKeyError(key)
+    return key

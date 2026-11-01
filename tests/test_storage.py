@@ -6,12 +6,17 @@ import pytest
 
 from app.storage.base import BlobExistsError, BlobNotFoundError, InvalidKeyError
 from app.storage.local import LocalDiskStorage
+from tests.s3_helpers import new_s3_storage, wipe
 
-# Add S3/MinIO here later; every test below then runs against it too.
-@pytest.fixture(params=["local"])
+# Every test below runs against every backend: if S3 passes the same suite as local disk, the two are interchangeable.
+@pytest.fixture(params=["local", "s3"])
 def storage(request, tmp_path):
     if request.param == "local":
-        return LocalDiskStorage(tmp_path / "blobs")
+        yield LocalDiskStorage(tmp_path / "blobs")
+    else:
+        st = new_s3_storage()          # skipped (with a reason) when no S3/MinIO server is reachable
+        yield st
+        wipe(st)
 
 
 def test_roundtrip_and_checksum(storage):
