@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment / secrets — NEVER commit these
+.env
+*.key
+*.pem
+
+# Data — too large for git
+data/
+LibriSpeech/
+
+# macOS
+.DS_Store
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+
+# Alembic (generated migration env, not versions)
+# Keep alembic/versions/ if you have migrations
+
+# Logs
+*.log
