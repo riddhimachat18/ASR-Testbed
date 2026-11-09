@@ -1,0 +1,35 @@
+# GPU lite stack: PostgreSQL + Redis only.
+# Storage stays on local disk (no MinIO needed).
+#
+# Start with:
+#   docker compose -f docker-compose-gpu-lite.yml up -d
+#
+# Then:
+#   alembic upgrade head
+#   celery -A gpu.celery_app_gpu worker --concurrency=1 --loglevel=info
+#   uvicorn gpu.main_gpu:factory --factory --port 8001
+
+services:
+  postgres:
+    image: postgres:16
+    command: postgres -c max_connections=200
+    environment:
+      POSTGRES_USER: asr
+      POSTGRES_PASSWORD: asr
+      POSTGRES_DB: asr
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_gpu:/var/lib/postgresql/data
+
+  redis:
+    image: redis:6.2
+    command: redis-server --save ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata_gpu:/data
+
+volumes:
+  pgdata_gpu:
+  redisdata_gpu:
