@@ -1,3 +1,19 @@
+# Results
+
+## Folder layout
+
+```
+results/
+├── CPU/   ← all results from CPU runs (existing baseline + load tests)
+├── GPU/   ← all results from GPU runs (populated after GPU experiments)
+└── README.md  ← this file
+```
+
+Save new CPU results to `results/CPU/` and new GPU results to `results/GPU/`
+so the two sets stay separate and are easy to compare.
+
+---
+
 # Baseline Results
 
 Each file is a snapshot of one full evaluation run over a dataset.

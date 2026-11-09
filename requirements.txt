@@ -18,7 +18,17 @@ boto3>=1.36
 # ASR pipeline
 faster-whisper>=1.0
 silero-vad>=5.0
-torchaudio>=2.0
-torch>=2.0
 av<14  # faster-whisper 1.x uses av.open(metadata_errors=...) which was removed in av 14+
-# ffmpeg is a system dependency — install via: brew install ffmpeg
+# ffmpeg is a system dependency — install via: brew install ffmpeg / choco install ffmpeg
+
+# torch / torchaudio — DO NOT let pip auto-install these from PyPI; it will pull CPU-only wheels.
+# Install the correct variant for your hardware BEFORE running pip install -r requirements.txt:
+#
+#   CPU only:
+#     pip install torch>=2.0 torchaudio>=2.0
+#
+#   CUDA 12.1 (RTX 30xx / 40xx — what this machine uses):
+#     pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+#
+# After the above, run:  pip install -r requirements.txt
+# torch and torchaudio are intentionally omitted here so pip does not overwrite the CUDA wheels.

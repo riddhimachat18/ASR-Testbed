@@ -1,0 +1,47 @@
+# GPU requirements — extends requirements.txt by swapping torch for CUDA wheels.
+#
+# Install order:
+#   1. Uninstall CPU torch first (if already installed):
+#        pip uninstall torch torchaudio -y
+#
+#   2. Install CUDA-enabled torch (pick the line that matches your CUDA version):
+#        # CUDA 12.1  (RTX 30xx / 40xx, most modern GPUs)
+#        pip install torch==2.3.0+cu121 torchaudio==2.3.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+#
+#        # CUDA 11.8  (older GPUs)
+#        pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+#
+#   3. Install the rest of the project requirements:
+#        pip install -r requirements-gpu.txt
+#
+# Note: faster-whisper uses CTranslate2 for inference, NOT torch directly.
+# CTranslate2 ships a CUDA-enabled wheel automatically when installed on a
+# machine with a CUDA driver. No separate GPU build step is needed.
+
+# ── same as requirements.txt ──────────────────────────────────────────────────
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+sqlalchemy>=2.0
+alembic>=1.13
+pydantic-settings>=2.2
+soundfile==0.14.0
+pytest>=8.0
+httpx>=0.27
+psycopg[binary]>=3.1
+celery[redis]>=5.4
+jiwer>=3.0
+soxr>=0.5
+numpy>=1.26
+boto3>=1.36
+faster-whisper>=1.0
+silero-vad>=5.0
+av<14
+
+# ── GPU-specific: torch/torchaudio are installed separately (see header above)
+# torch>=2.0        <- install via --index-url for the correct CUDA variant
+# torchaudio>=2.0   <- same
+
+# CTranslate2 CUDA support is bundled inside the faster-whisper wheel;
+# no separate action is needed.  If you need to verify:
+#   python -c "import ctranslate2; print(ctranslate2.get_supported_compute_types('cuda'))"
