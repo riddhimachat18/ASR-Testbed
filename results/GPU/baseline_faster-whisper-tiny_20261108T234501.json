@@ -1,0 +1,37 @@
+{
+  "model": "faster-whisper-tiny",
+  "dataset": "librispeech-test-clean",
+  "timestamp": "2026-11-08T23:45:01.709487+00:00",
+  "device": "cuda",
+  "compute_type": "float16",
+  "runs_total": 2620,
+  "runs_done": 2620,
+  "runs_failed": 0,
+  "runs_unscored": 0,
+  "wer": {
+    "micro": 0.0914,
+    "per_file_mean": 0.1066,
+    "p10": 0.0,
+    "p25": 0.0,
+    "p50": 0.0667,
+    "p75": 0.15,
+    "p90": 0.2778,
+    "p95": 0.375
+  },
+  "cer": {
+    "micro": 0.0389
+  },
+  "latency_s": {
+    "mean": 1.036,
+    "p50": 0.79,
+    "p95": 2.4493
+  },
+  "rtf": {
+    "mean": 0.149,
+    "p50": 0.1397,
+    "p95": 0.2317,
+    "note": "rtf < 1.0 means faster than real-time"
+  },
+  "total_ref_words": 52576,
+  "total_word_errors": 4803
+}

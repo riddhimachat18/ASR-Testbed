@@ -40,3 +40,6 @@ htmlcov/
 
 # Logs
 *.log
+
+# GPU env file — contains DB URLs and device settings, not for version control
+.env.gpu
