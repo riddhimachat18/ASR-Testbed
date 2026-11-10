@@ -40,7 +40,7 @@ def test_second_run_on_the_same_audio_hits_the_cache(client, make_user):
                          data={"model_version": "stub-prepared", "config": FIXED},
                          files={"file": ("a.wav", make_wav(0.2), "audio/wav")}).json()  # same bytes, same checksum
     _wait_done(client, key, second["run_id"])
-    assert _run(client, second["run_id"]).profile["cache_hits"] == {"chunks": True}
+    assert _run(client, second["run_id"]).profile["cache_hits"] == {"chunks": True, "resampled": True}
 
 
 def test_failed_run_keeps_its_partial_profile(client, make_user):
