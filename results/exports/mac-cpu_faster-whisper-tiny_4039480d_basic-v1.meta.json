@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "model": "faster-whisper-tiny",
+  "dataset": "librispeech-test-clean",
+  "machine": "mac-cpu",
+  "config_hash": "4039480dc578cf0c672e880191ae7f36d0413ee5bf55f41342b83fa27ef40efb",
+  "config": {
+    "schema_version": 1,
+    "audio": {
+      "sample_rate": 16000
+    },
+    "chunking": {
+      "strategy": "vad",
+      "max_chunk_s": 30.0,
+      "overlap_s": 0.0,
+      "vad": {
+        "backend": "silero",
+        "threshold": 0.5,
+        "min_speech_ms": 250,
+        "min_silence_ms": 100,
+        "speech_pad_ms": 30
+      }
+    },
+    "decoding": {
+      "beam_size": 5,
+      "temperature": 0.0,
+      "language": null,
+      "task": "transcribe"
+    },
+    "model_options": {}
+  },
+  "normalization": "basic-v1",
+  "worker_concurrency": 8,
+  "exported_at": "2026-11-10T16:01:35.544866+00:00",
+  "git_commit": "2578418",
+  "files": 2620,
+  "summary": {
+    "runs_total": 2620,
+    "runs_done": 2620,
+    "runs_failed": 0,
+    "runs_unscored": 0,
+    "normalization": "basic-v1",
+    "wer": {
+      "micro": 0.0933,
+      "per_file_mean": 0.1096,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0682,
+      "p75": 0.1538,
+      "p90": 0.2857,
+      "p95": 0.375
+    },
+    "cer": {
+      "micro": 0.0401
+    },
+    "errors": {
+      "substitutions": 3727,
+      "deletions": 470,
+      "insertions": 710
+    },
+    "latency_s": {
+      "mean": 10.958,
+      "p50": 8.3748,
+      "p95": 27.064
+    },
+    "rtf": {
+      "mean": 1.583,
+      "p50": 1.4818,
+      "p95": 2.5889,
+      "note": "rtf < 1.0 means faster than real-time"
+    },
+    "throughput": {
+      "audio_hours": 5.403,
+      "wall_hours": 1.003,
+      "audio_hours_per_wall_hour": 5.39
+    },
+    "total_ref_words": 52576,
+    "total_word_errors": 4907
+  }
+}
