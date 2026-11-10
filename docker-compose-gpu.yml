@@ -12,10 +12,10 @@
 # Start infrastructure only:
 #   docker compose -f docker-compose-gpu.yml up -d postgres redis minio minio-setup
 #
-# Then run the GPU server and worker manually (outside Docker) so you can
+# Then, with ASR_ENV_FILE=.env.gpu set, run the server and worker manually (outside Docker) so you can
 # iterate on code without rebuilding the image:
-#   uvicorn gpu.main_gpu:factory --factory --port 8001
-#   celery -A gpu.celery_app_gpu worker --concurrency=1 --loglevel=info
+#   uvicorn app.main:factory --factory --port 8001
+#   celery -A app.celery_app worker --pool=solo --concurrency=1 --loglevel=info  # --pool=solo on Windows
 
 services:
   postgres:
@@ -52,7 +52,7 @@ services:
   #
   # asr-worker-gpu:
   #   image: asr-testbed-gpu
-  #   command: celery -A gpu.celery_app_gpu worker --concurrency=1 --loglevel=info
+  #   command: celery -A app.celery_app worker --pool=solo --concurrency=1 --loglevel=info  # --pool=solo on Windows
   #   env_file: .env.gpu
   #   depends_on: [postgres, redis]
   #   deploy:
