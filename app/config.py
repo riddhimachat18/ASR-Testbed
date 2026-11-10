@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -6,9 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """All configuration comes from environment variables (or .env)."""
+    """All configuration comes from environment variables (or an env file).
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    The env file is .env unless ASR_ENV_FILE names another one (the GPU machine uses ASR_ENV_FILE=.env.gpu).
+    One Settings class serves CPU and GPU machines; only the values differ.
+    """
+
+    model_config = SettingsConfigDict(env_file=os.environ.get("ASR_ENV_FILE", ".env"), extra="ignore")
 
     data_root: str = "./data/blobs"
     database_url: str = "sqlite:///./data/app.db"
@@ -17,6 +22,18 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 500 * 1024 * 1024
     worker_threads: int = 4
     stub_sleep_seconds: float = 0.5
+
+    # --- inference hardware (Part H) ---
+    # Defaults for runs submitted on this machine. They are written into each run's config.model_options, so they
+    # are part of the config hash: a CPU int8 run and a GPU float16 run never share a leaderboard row.
+    device: Literal["cpu", "cuda"] = "cpu"
+    compute_type: str = "int8"  # validated per run by FasterWhisperOptions (float16 needs cuda)
+    # Silero VAD device. Keep "cpu" on every machine: VAD is tiny, and identical chunk boundaries on both
+    # machines mean CPU and GPU runs differ only in the recognition model.
+    vad_device: Literal["cpu", "cuda"] = "cpu"
+
+    # --- evaluation ---
+    normalizer: str = "whisper-en-v1"  # text normalization for new scores; see app/evaluation/metrics.py
     db_pool_size: int = 20
     db_max_overflow: int = 20
     db_pool_timeout: int = 30

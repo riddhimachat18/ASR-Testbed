@@ -46,6 +46,7 @@ class ReferenceResponse(BaseModel):
 class LeaderboardRow(BaseModel):
     model_version: str
     config_hash: str | None
+    normalization: str | None = None
     config: dict | None
     runs: int
     audio_files: int

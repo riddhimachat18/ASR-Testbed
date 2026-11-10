@@ -48,3 +48,4 @@ keys.json
 .env.*
 !.env.example
 *.bundle
+!.env.gpu.example

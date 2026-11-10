@@ -107,7 +107,7 @@ class AudioService:
         else:
             ref.text, ref.language, ref.source = text, language, source
         self.s.flush()
-        n = evaluate_audio_runs(self.s, audio_id)
+        n = evaluate_audio_runs(self.s, audio_id, self.settings.normalizer)
         self.s.commit()
         return n
 
