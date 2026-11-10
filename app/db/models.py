@@ -58,8 +58,13 @@ class Audio(Base):
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
     dataset_id: Mapped[str | None] = mapped_column(
         ForeignKey("datasets.id", name="fk_audio_dataset_id"), nullable=True, index=True)
+    # The file's ID in its source dataset (LibriSpeech utterance ID such as 1089-134686-0000). Audio ids differ
+    # between databases, so exports and cross-machine comparisons match files on this (Part H).
+    external_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     runs: Mapped[list["TranscriptionRun"]] = relationship(back_populates="audio")
+
+    __table_args__ = (Index("ix_audio_dataset_external_id", "dataset_id", "external_id", unique=True),)
 
 
 class ReferenceTranscript(Base):
@@ -95,6 +100,9 @@ class TranscriptionRun(Base):
     wer: Mapped[float | None] = mapped_column(Float, nullable=True)
     cer: Mapped[float | None] = mapped_column(Float, nullable=True)
     metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # profiling (Part H): per-stage timings, cache hits and the runtime (device, library versions, GPU name).
+    # Its own column because rescoring rewrites `metrics`, and timings must survive that.
+    profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     audio: Mapped[Audio] = relationship(back_populates="runs")
 
