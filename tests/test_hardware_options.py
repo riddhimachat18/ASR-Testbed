@@ -22,7 +22,14 @@ def _resolve(reg: ModelRegistry, raw: dict, model: str = "faster-whisper-tiny"):
     return resolve_run_config(model, raw, reg.options_model(model))
 
 
-DECODER_DEFAULTS = {"temperature_fallback": False, "no_repeat_ngram_size": 0, "repetition_penalty": 1.0}
+DECODER_DEFAULTS = {"temperature_fallback": False, "no_repeat_ngram_size": 3, "repetition_penalty": 1.0}
+# The official CPU baseline (results/CPU/baseline_faster-whisper-tiny_cpu-int8_20261110T192640.json) was run with
+# exactly the defaults, so the default tiny config on a CPU machine must keep this hash.
+CPU_TINY_DEFAULT_HASH = "57da298d48ce38a434fd2ef03f2306ff29f59beb14932fce9dc27797862095ca"
+
+
+def test_default_cpu_tiny_config_keeps_the_official_baseline_hash():
+    assert _resolve(_registry(), {})[1] == CPU_TINY_DEFAULT_HASH
 
 
 def test_machine_defaults_are_written_into_every_faster_whisper_config():
@@ -32,7 +39,7 @@ def test_machine_defaults_are_written_into_every_faster_whisper_config():
     assert cfg["model_options"] == {"device": "cuda", "compute_type": "float16", **DECODER_DEFAULTS}
 
 
-@pytest.mark.parametrize("opts", [{"temperature_fallback": True}, {"no_repeat_ngram_size": 3},
+@pytest.mark.parametrize("opts", [{"temperature_fallback": True}, {"no_repeat_ngram_size": 0},
                                   {"repetition_penalty": 1.1}])
 def test_fallback_and_loop_guard_are_part_of_the_hash(opts):
     reg = _registry()

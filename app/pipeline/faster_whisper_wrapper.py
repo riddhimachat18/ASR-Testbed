@@ -18,9 +18,10 @@ Design decisions
   confidence (avg log-prob < -1.0) is re-decoded by sampling at the next temperature, up to 5 more times. That
   is random and can cost up to ~6x on hard segments. Decided in Part H.7: off, with a deterministic loop guard.
 
-* Deterministic loop guard: model_options.no_repeat_ngram_size (0 = off) forbids repeating any n-gram of that
-  size within a segment, and repetition_penalty (1.0 = off) down-weights tokens already generated. Neither
-  samples, so decoding stays deterministic. Tiny without either looped once on test-clean ("North, North, ...").
+* Deterministic loop guard: model_options.no_repeat_ngram_size (default 3; 0 = off) forbids repeating any
+  n-gram of that size within a segment, and repetition_penalty (1.0 = off) down-weights tokens already
+  generated. Neither samples, so decoding stays deterministic. Tiny without a guard looped once on test-clean
+  ("North, North, ..."); n=3 fixed it (design log H.7). Legacy configs without the key decode with no guard.
 
 * Decoder statistics for the run profile (last_stats): segments, segments that needed a fallback temperature,
   output words, and the longest run of one repeated word (a reference-free loop signal).
@@ -66,7 +67,10 @@ class FasterWhisperOptions(Strict):
     device: Device = "cpu"
     compute_type: ComputeType = "int8"
     temperature_fallback: bool = False                 # see module docstring; False keeps decoding deterministic
-    no_repeat_ngram_size: int = Field(0, ge=0, le=10)  # deterministic loop guard; 0 = off
+    # Deterministic loop guard; 0 = off. Default 3 since H.7: on test-clean it removed tiny's only loop (-109
+    # errors) at a cost of +9 errors over 10 other files, e.g. it blocks a genuinely repeated phrase
+    # ("an antipathy, an antipathy"). Re-check on domain audio: it can also block long digit runs ("0 0 0 0").
+    no_repeat_ngram_size: int = Field(3, ge=0, le=10)
     repetition_penalty: float = Field(1.0, ge=1.0, le=2.0)  # deterministic loop guard; 1.0 = off
 
     @model_validator(mode="after")
