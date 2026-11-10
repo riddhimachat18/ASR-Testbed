@@ -35,6 +35,7 @@ results/<CPU|GPU>/baseline_<model>_<device>-<compute_type>_<YYYYMMDDTHHMMSS>.jso
 | `inference_rtf` | Model time only / audio duration: the number to compare across hardware |
 | `cache_hit_rate` | Share of runs whose chunk list / resampled audio came from the cache |
 | `throughput` | Audio hours processed per wall-clock hour, first claim to last completion |
+| `loops` | Runaway outputs, counted apart from WER: `runaway_files` (insertions exceed the reference length), `repeat_files` (one word repeated 4+ times in a row), `longest_repeat_max`, `fallback_files` and `fallback_rate` (segments re-decoded at a higher temperature; 0 when fallback is off) |
 | `peak_rss_mb_max` | Largest peak resident memory of a worker process (not on Windows) |
 
 `python scripts/report_baseline.py <files>` prints files and warns when normalization, dataset, worker count or
