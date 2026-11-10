@@ -1,58 +1,12 @@
-# GPU Baseline Results
+# GPU results (RTX 3050 laptop, Windows)
 
-Same format as `README.md` — the GPU results are stored alongside the CPU ones
-so they can be compared side-by-side.
+Same file format as `results/README.md`. Hardware details go in `hardware.txt` (`nvidia-smi` output, driver and
+CUDA versions). How to run: `docs/GPU.md`.
 
-## Naming convention
+| File | Run | Notes |
+|---|---|---|
+| `baseline_faster-whisper-tiny_20261108T234501.json` | tiny, float16, 1 worker: WER 9.14%, CER 3.89%, mean latency 1.04 s, RTF 0.149 | Before Part H: `basic-v1` scoring, temperature fallback active, no stage timings. The WER gap to the CPU baseline (9.33%) reflects float16 vs int8 and is untested for significance |
+| `stage1_{20,100,500}users_*` | Locust, **stub model** | Measure the Windows API, Postgres and solo-pool setup, not the GPU; about 90 s per stage |
 
-```
-baseline_gpu_<model-version>_<YYYYMMDDTHHMMSS>.json
-```
-
-The `gpu_` prefix distinguishes GPU runs from CPU runs so they sort clearly in
-the `results/` directory.
-
-## Expected ranges (NVIDIA GPU, e.g. RTX 3080 / A100)
-
-| Model              | WER (test-clean) | RTF (GPU, float16) |
-|--------------------|------------------|--------------------|
-| faster-whisper-tiny  | ~5–8%          | ~0.03–0.08x        |
-| faster-whisper-base  | ~4–6%          | ~0.05–0.12x        |
-| faster-whisper-small | ~3–4%          | ~0.08–0.20x        |
-
-RTF < 1.0 = faster than real-time.
-GPU RTF is typically 10–50× lower than CPU RTF.
-
-## CPU baseline for comparison
-
-| Model              | WER   | RTF (CPU, MacBook) |
-|--------------------|-------|--------------------|
-| faster-whisper-tiny | 9.33% | 1.583x             |
-
-The CPU baseline JSON is in `results/CPU/baseline_faster-whisper-tiny_20261101T105820.json`.
-
-## How to generate a GPU baseline report
-
-```bash
-# Run the GPU server
-uvicorn gpu.main_gpu:factory --factory --port 8001
-
-# Submit and score the dataset (same scripts as CPU, just point at port 8001)
-python scripts/submit_dataset.py --url http://localhost:8001 ...
-
-# Generate the baseline JSON — save directly into results/GPU/
-python scripts/report_baseline.py --output results/GPU/baseline_faster-whisper-tiny_$(date +%Y%m%dT%H%M%S).json
-```
-
-## Comparing CPU vs GPU results
-
-```bash
-# CPU baseline lives in results/CPU/
-# GPU baseline lives in results/GPU/
-
-python scripts/report_baseline.py \
-    results/CPU/baseline_faster-whisper-tiny_*.json \
-    results/GPU/baseline_faster-whisper-tiny_*.json
-```
-
-Key metrics: **WER** (should be equal or better on GPU with float16) and **RTF** (should be 10–50× lower on GPU).
+New baselines: `python scripts/run_baseline.py --model <model> --worker-concurrency 1` with `ASR_ENV_FILE=.env.gpu`.
+Then export them (`python -m scripts.export_runs ... --machine rtx3050 --worker-concurrency 1`) and commit the export.

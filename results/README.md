@@ -1,66 +1,62 @@
 # Results
 
-## Folder layout
-
 ```
 results/
-├── CPU/   ← all results from CPU runs (existing baseline + load tests)
-├── GPU/   ← all results from GPU runs (populated after GPU experiments)
-└── README.md  ← this file
+├── CPU/       baselines and load tests from the MacBook (CPU)
+├── GPU/       baselines and load tests from the RTX 3050 laptop
+├── exports/   per-file exports (scripts/export_runs.py): how results move between the two databases
+└── comparisons/  compare_runs.py --markdown output
 ```
 
-Save new CPU results to `results/CPU/` and new GPU results to `results/GPU/`
-so the two sets stay separate and are easy to compare.
+## Baseline files
 
----
-
-# Baseline Results
-
-Each file is a snapshot of one full evaluation run over a dataset.
-
-## File naming
+Written by `scripts/run_baseline.py`:
 
 ```
-baseline_<model-version>_<YYYYMMDDTHHMMSS>.json
+results/<CPU|GPU>/baseline_<model>_<device>-<compute_type>_<YYYYMMDDTHHMMSS>.json
 ```
 
-## Fields
-
-| Field | Description |
+| Field | Meaning |
 |---|---|
-| `model` | Model version string (matches `model_version` in the DB) |
-| `dataset` | Dataset name (matches `datasets.name` in the DB) |
-| `timestamp` | UTC ISO-8601 timestamp when the report was generated |
-| `runs_total` | Total run rows included in this report |
-| `runs_done` | Runs that finished successfully |
-| `runs_failed` | Runs that errored |
-| `runs_unscored` | Done runs with no WER (missing reference transcript) |
-| `wer.micro` | **Primary metric.** Micro-averaged WER: total word errors / total reference words across the whole corpus. This is the correct way to aggregate WER — do not average per-file WERs. |
-| `wer.per_file_mean` | Mean of per-file WERs (for reference only; biased by short files) |
-| `wer.p50 / p90 / p95` | Percentiles of the per-file WER distribution |
+| `model`, `dataset`, `timestamp`, `git_commit` | What ran, on which data, from which code |
+| `config_hash`, `config` | The fully resolved run config and its hash (the leaderboard key) |
+| `device`, `compute_type` | Hardware and precision the runs asked for (`config.model_options`) |
+| `worker_concurrency` | Celery workers that processed the runs. Speed is comparable only at equal values; use 1 |
+| `runtime` | Where it actually ran: device, precision, GPU name, library versions, platform |
+| `normalization` | Text normalization of every score in the file (`whisper-en-v1`, or `basic-v1`) |
+| `runs_total / runs_done / runs_failed / runs_unscored` | Counts |
+| `wer.micro` | **Primary metric.** Total word errors / total reference words. Never average per-file WERs |
+| `wer.per_file_mean`, `wer.p10 … p95` | Per-file WER distribution (for the tail) |
 | `cer.micro` | Micro-averaged character error rate |
-| `latency_s.mean/p50/p95` | Wall-clock transcription time per file (seconds) |
-| `rtf.mean/p50/p95` | Real-time factor = latency / audio_duration. RTF < 1.0 = faster than real-time |
-| `total_ref_words` | Total reference words across all scored files |
-| `total_word_errors` | Total substitutions + deletions + insertions |
+| `errors` | Total substitutions, deletions, insertions |
+| `latency_s` | Per-file time from claim to completion: fetch, prepare (resample + VAD or cache), inference, scoring. Not queue wait |
+| `rtf` | latency / audio duration per file; below 1 is faster than real time |
+| `stages_s` | Mean, p50, p95 of `prepare_s`, `inference_s`, `score_s` |
+| `inference_rtf` | Model time only / audio duration: the number to compare across hardware |
+| `cache_hit_rate` | Share of runs whose chunk list / resampled audio came from the cache |
+| `throughput` | Audio hours processed per wall-clock hour, first claim to last completion |
+| `peak_rss_mb_max` | Largest peak resident memory of a worker process (not on Windows) |
 
-## Comparing results
+`python scripts/report_baseline.py <files>` prints files and warns when normalization, dataset, worker count or
+precision differ. For a WER difference with a confidence interval, export both runs and use
+`python -m scripts.compare_runs A.jsonl.gz B.jsonl.gz`.
 
-```bash
-# print the latest baseline
-python scripts/report_baseline.py
+## Baselines recorded before Part H (read with care)
 
-# compare two baselines
-python scripts/report_baseline.py results/baseline_faster-whisper-tiny_*.json
-```
-
-## Expected ranges (CPU, Apple Silicon M-series)
-
-| Model | WER (test-clean) | RTF (CPU) |
+| File | What it is | Caveats |
 |---|---|---|
-| faster-whisper-tiny | ~5–8% | ~0.1–0.3x |
-| faster-whisper-base | ~4–6% | ~0.2–0.5x |
-| faster-whisper-small | ~3–4% | ~0.5–1.0x |
+| `CPU/baseline_faster-whisper-tiny_20261101T105820.json` (and the same run re-reported as `…20261102T083121.json`) | tiny, CPU int8, 8 Celery workers: WER 9.33%, RTF 1.58 | 8 workers shared one CPU (speed = contention); `basic-v1` scoring; temperature fallback active |
+| `GPU/baseline_faster-whisper-tiny_20261108T234501.json` | tiny, RTX 3050 float16, 1 worker: WER 9.14%, RTF 0.149 | `basic-v1` scoring; temperature fallback active; no stage timings |
 
-RTF < 1.0 means faster than real-time. All numbers are approximate and
-depend on audio length, VAD chunk count, and hardware.
+"Temperature fallback active": before Part H the configured `temperature` was never passed to faster-whisper, so
+its fallback schedule (0.0 to 1.0) ran. New runs decode exactly as configured and get new config hashes.
+
+No expected ranges are listed here on purpose: earlier guesses (e.g. 0.1 to 0.3x RTF for tiny on CPU) were wrong.
+Only measured numbers belong in this folder.
+
+## Load tests
+
+`stage1_<N>users_*.csv/html` are Locust exports. Every load test so far used the **stub** model (Locust sent no
+`model_version`), so they measure the API, queue and database, not inference. The GPU folder's load tests ran
+about 90 s per stage on the Windows laptop, against about 5 minutes on the Mac, so the two sets are not
+comparable stage by stage. Real-model load tests: see `locustfile.py` (`LOCUST_MODEL`, `LOCUST_AUDIO`).

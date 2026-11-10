@@ -1,33 +1,83 @@
-# ASR Testbed (Phases 0-1 implemented, Phase 2 + Part E queue running)
+# ASR Research Testbed
 
-## Run
+A pipeline for benchmarking speech recognition (WER, CER, latency, real-time factor) so that a difference in a
+result comes from the method under test, not from the infrastructure. FastAPI, Celery + Redis, Postgres,
+local disk or S3/MinIO, Silero VAD, faster-whisper, jiwer. One code path serves CPU and GPU machines; only
+settings differ. Every design decision and result is recorded in the design log (Claude doc, "ASR Research
+Testbed: Design Log").
+
+## Setup (CPU, macOS)
+
+    pip install torch torchaudio            # CPU wheels
     pip install -r requirements.txt
-    cp .env.example .env
+    cp .env.example .env                    # set DATABASE_URL to Postgres, QUEUE_BACKEND=celery
+    docker compose up -d postgres redis
     alembic upgrade head
-    python -m scripts.create_user alice          # prints an API key once
-    uvicorn app.main:factory --factory --reload
-    curl -H "X-API-Key: $KEY" -F file=@sample.wav -F model_version=stub localhost:8000/audio
+    python -m scripts.create_user alice     # or, on an existing database: python -m scripts.rotate_keys
+    python scripts/import_librispeech.py --source LibriSpeech/test-clean
+    uvicorn app.main:factory --factory
+    FORKED_BY_MULTIPROCESSING=1 celery -A app.celery_app worker --concurrency=1 --loglevel=info
+
+GPU machine: see [docs/GPU.md](docs/GPU.md) (`ASR_ENV_FILE=.env.gpu`, `DEVICE=cuda`, `COMPUTE_TYPE=float16`).
+
+## Settings that decide what a run means
+
+| Setting | Default | Effect |
+|---|---|---|
+| `DEVICE`, `COMPUTE_TYPE` | `cpu`, `int8` | Written into every faster-whisper run's `config.model_options`, so part of the config hash. Override per run with `model_options` |
+| `VAD_DEVICE` | `cpu` | Keep `cpu` on every machine: identical chunk boundaries |
+| `NORMALIZER` | `whisper-en-v1` | Text normalization for new scores (`basic-v1` was used before Part H) |
+| `ASR_ENV_FILE` | `.env` | Which env file to read |
+
+## Workflow: measure, export, compare
+
+    # 1. baseline one model + settings over the dataset (one worker for any speed number)
+    python scripts/run_baseline.py --model faster-whisper-tiny --worker-concurrency 1
+    python scripts/report_baseline.py results/CPU/baseline_*.json
+
+    # 2. export it (per file, keyed by LibriSpeech utterance ID) and commit the export
+    python -m scripts.export_runs --model faster-whisper-tiny --machine mac-cpu --worker-concurrency 1
+
+    # 3. compare any two exports, from either machine: paired bootstrap, 95% interval
+    python -m scripts.compare_runs results/exports/A.jsonl.gz results/exports/B.jsonl.gz \
+        --markdown results/comparisons/A_vs_B.md
+
+    # re-score finished runs under another normalization (export first: this overwrites the scores)
+    python -m scripts.evaluate --recompute --normalization whisper-en-v1 --model faster-whisper-tiny
+
+Rules: compare WER only under one normalization; compare speed only at equal worker concurrency; claim a
+difference only when the paired-bootstrap interval excludes zero.
+
+## Quick API check
+
+    curl -H "X-API-Key: $KEY" -F file=@sample.wav -F model_version=faster-whisper-tiny localhost:8000/audio
     curl -H "X-API-Key: $KEY" localhost:8000/runs/<run_id>
-    curl -H "X-API-Key: $KEY" localhost:8000/runs/<run_id>/result
+    curl -H "X-API-Key: $KEY" localhost:8000/datasets/librispeech-test-clean/leaderboard
 
 ## Test
-    pytest
+
+    pytest          # no model, torch or S3 server needed; S3 tests skip without one
 
 ## Layout
-    app/api        routes, auth dependency, schemas (never touches storage/DB directly)
-    app/services   submit_audio / get_status / get_result
-    app/storage    StorageBackend interface + LocalDiskStorage (S3/MinIO goes here next)
-    app/db         SQLAlchemy models, repositories (status state machine, atomic claim)
-    app/pipeline   ModelWrapper interface, stub model, registry, worker + queue
-    migrations     Alembic
+
+    app/api           routes, auth dependency, schemas (never touches storage/DB directly)
+    app/services      submit_audio / get_status / get_result
+    app/storage       StorageBackend interface: local disk and S3/MinIO
+    app/db            SQLAlchemy models, repositories (status state machine, atomic claim)
+    app/pipeline      ModelWrapper interface, stub and faster-whisper models, registry, Silero VAD,
+                      derived cache, worker (with per-run profile), queues
+    app/evaluation    WER/CER with versioned normalization (whisper_norm/ is vendored), leaderboard, summaries
+    scripts           import, baseline, report, evaluate, export, compare, rotate_keys, recovery
+    migrations        Alembic (0001 to 0005)
+    results           measured baselines, exports, comparisons (see results/README.md)
 
 ## Decisions made while implementing
+
 - `list` on the storage interface is named `list_keys` (avoids shadowing the builtin).
-- Duplicate uploads: every upload gets its own blob + audio row; `checksum` is indexed, not unique.
-  Dedupe (reuse blob, new audio row) is a small change in `AudioService.submit_audio` once you want it.
+- Duplicate uploads: every upload gets its own blob and audio row; `checksum` is indexed, not unique.
 - Accepted formats: .wav .flac .ogg .mp3, validated by decoding the header with soundfile.
-- Workers claim runs with an atomic `UPDATE ... WHERE status='queued'`, so duplicate/retried jobs are no-ops.
-- Queue is an in-process thread pool behind `enqueue(run_id)`; Celery/Redis replaces `InProcessQueue` only.
+- Workers claim runs with an atomic `UPDATE ... WHERE status='queued'`, so duplicate or retried jobs are no-ops.
+- `keys.json`, `.env` and `.env.gpu` are never committed (they hold API keys and database URLs).
 
 ## Part E: Celery + Redis and crash recovery
     docker compose up -d postgres redis
