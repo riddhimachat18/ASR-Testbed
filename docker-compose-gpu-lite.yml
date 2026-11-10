@@ -5,9 +5,10 @@
 #   docker compose -f docker-compose-gpu-lite.yml up -d
 #
 # Then:
+#   set ASR_ENV_FILE=.env.gpu   (PowerShell: $env:ASR_ENV_FILE=".env.gpu")
 #   alembic upgrade head
-#   celery -A gpu.celery_app_gpu worker --concurrency=1 --loglevel=info
-#   uvicorn gpu.main_gpu:factory --factory --port 8001
+#   celery -A app.celery_app worker --pool=solo --concurrency=1 --loglevel=info  # --pool=solo on Windows
+#   uvicorn app.main:factory --factory --port 8001
 
 services:
   postgres:

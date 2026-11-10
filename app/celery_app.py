@@ -31,7 +31,9 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # don't hoard messages: fair dispatch, less lost on a crash
     task_soft_time_limit=settings.task_soft_time_limit_s,
     task_time_limit=settings.task_hard_time_limit_s,
-    broker_transport_options={"visibility_timeout": settings.visibility_timeout_s},
+    # socket timeouts (from the Windows GPU setup): a slow or restarting Redis must not hang the worker forever
+    broker_transport_options={"visibility_timeout": settings.visibility_timeout_s,
+                              "socket_timeout": 30, "socket_connect_timeout": 30},
     broker_connection_retry_on_startup=True,
 )
 
