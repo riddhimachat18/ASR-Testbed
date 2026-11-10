@@ -38,5 +38,5 @@ class AudioPreparer:
         sr = cfg.audio.sample_rate
         hits: dict[str, bool] = {}
         chunks = self.cache.chunks(source_key, checksum, cfg.chunking, sr, self.vad_backends, hits=hits)
-        stream = self.cache.resampled(source_key, checksum, sr)
+        stream = self.cache.resampled(source_key, checksum, sr, hits=hits)
         return stream, Prepared(sr, chunks, hits)
