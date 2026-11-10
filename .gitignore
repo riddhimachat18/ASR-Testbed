@@ -43,3 +43,8 @@ htmlcov/
 
 # GPU env file — contains DB URLs and device settings, not for version control
 .env.gpu
+
+keys.json
+.env.*
+!.env.example
+*.bundle
