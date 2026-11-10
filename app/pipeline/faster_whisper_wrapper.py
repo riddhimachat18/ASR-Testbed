@@ -9,9 +9,21 @@ Design decisions
   module to change those two values, and CPU and GPU runs got the same hash.
 
 * Decoding follows the stored config exactly.
-  beam_size, language, task AND temperature are passed to faster-whisper. A single temperature disables
-  faster-whisper's fallback schedule (0.0, 0.2, ... 1.0); before Part H temperature was never passed, so the
-  fallback was active although the stored config said 0.0.
+  beam_size, language, task AND temperature are passed to faster-whisper. Before Part H temperature was never
+  passed, so faster-whisper's fallback schedule (0.0, 0.2, ... 1.0) ran although the stored config said 0.0.
+
+* Temperature fallback is an explicit, hashed choice (model_options.temperature_fallback, default False).
+  Off: one temperature, so decoding is deterministic (same audio, same transcript) and compute per segment is
+  bounded. On: Whisper's schedule; a segment whose output looks like a loop (compression ratio > 2.4) or has low
+  confidence (avg log-prob < -1.0) is re-decoded by sampling at the next temperature, up to 5 more times. That
+  is random and can cost up to ~6x on hard segments. Decided in Part H.7: off, with a deterministic loop guard.
+
+* Deterministic loop guard: model_options.no_repeat_ngram_size (0 = off) forbids repeating any n-gram of that
+  size within a segment, and repetition_penalty (1.0 = off) down-weights tokens already generated. Neither
+  samples, so decoding stays deterministic. Tiny without either looped once on test-clean ("North, North, ...").
+
+* Decoder statistics for the run profile (last_stats): segments, segments that needed a fallback temperature,
+  output words, and the longest run of one repeated word (a reference-free loop signal).
 
 * needs_preparation = True
   The worker sends the cached 16 kHz mono WAV stream and a Prepared object (chunk time boundaries). We read each
@@ -32,7 +44,7 @@ import logging
 import threading
 from typing import BinaryIO, Literal
 
-from pydantic import BaseModel, create_model, model_validator
+from pydantic import BaseModel, Field, create_model, model_validator
 
 from app.pipeline.model_wrapper import ModelWrapper
 from app.pipeline.prepare import Prepared
@@ -45,11 +57,17 @@ ComputeType = Literal["int8", "int8_float32", "int8_float16", "int8_bfloat16", "
 _GPU_ONLY = {"float16", "int8_float16"}  # CTranslate2 has no float16 kernels on CPU
 
 
+FALLBACK_SCHEDULE = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)  # Whisper's standard temperature schedule
+
+
 class FasterWhisperOptions(Strict):
     """config.model_options for every faster-whisper model."""
 
     device: Device = "cpu"
     compute_type: ComputeType = "int8"
+    temperature_fallback: bool = False                 # see module docstring; False keeps decoding deterministic
+    no_repeat_ngram_size: int = Field(0, ge=0, le=10)  # deterministic loop guard; 0 = off
+    repetition_penalty: float = Field(1.0, ge=1.0, le=2.0)  # deterministic loop guard; 1.0 = off
 
     @model_validator(mode="after")
     def _valid_combination(self):
@@ -123,38 +141,64 @@ class FasterWhisperWrapper(ModelWrapper):
         opts = config.model_options or {}
         return opts.get("device", self.device), opts.get("compute_type", self.compute_type)
 
+    @staticmethod
+    def decode_kwargs(config: RunConfig) -> dict:
+        """The exact keyword arguments given to faster-whisper for this config (legacy configs without the
+        Part H options decode with fallback off and no loop guard)."""
+        dec, opts = config.decoding, config.model_options or {}
+        if opts.get("temperature_fallback", False):
+            temperature = [dec.temperature] + [t for t in FALLBACK_SCHEDULE if t > dec.temperature]
+        else:
+            temperature = dec.temperature  # one value: no fallback, deterministic
+        return {"language": dec.language, "beam_size": dec.beam_size, "task": dec.task,
+                "temperature": temperature,
+                "no_repeat_ngram_size": int(opts.get("no_repeat_ngram_size", 0)),
+                "repetition_penalty": float(opts.get("repetition_penalty", 1.0)),
+                "vad_filter": False,  # our own VAD chunking runs upstream
+                "word_timestamps": False}
+
     def transcribe(self, audio: BinaryIO, config: RunConfig, prepared: Prepared | None = None) -> str:
         device, compute_type = self.resolve_hardware(config)
         model = _get_model(self.model_size, device, compute_type)
-        dec = config.decoding
-        kwargs = {"language": dec.language, "beam_size": dec.beam_size, "task": dec.task,
-                  "temperature": dec.temperature}
+        kwargs = self.decode_kwargs(config)
+        base_temperature = config.decoding.temperature
         sample_rate = prepared.sample_rate if prepared else config.audio.sample_rate
         chunks = prepared.chunks if prepared else None
+        stats = {"segments": 0, "fallback_segments": 0}
 
         if not chunks:  # no chunk plan (or an empty one): transcribe the whole file in one shot
             audio.seek(0)
-            return self._transcribe_stream(model, audio, **kwargs)
-
-        parts: list[str] = []
-        for chunk in chunks:
-            chunk_buf = io.BytesIO(_read_chunk_bytes(audio, chunk.start, chunk.end, sample_rate))
-            text = self._transcribe_stream(model, chunk_buf, **kwargs)
-            if text:
-                parts.append(text)
-        return " ".join(parts)
+            parts = [self._transcribe_stream(model, audio, kwargs, base_temperature, stats)]
+        else:
+            parts = []
+            for chunk in chunks:
+                chunk_buf = io.BytesIO(_read_chunk_bytes(audio, chunk.start, chunk.end, sample_rate))
+                parts.append(self._transcribe_stream(model, chunk_buf, kwargs, base_temperature, stats))
+        text = " ".join(p for p in parts if p)
+        self.last_stats = {**stats, **output_stats(text)}  # one wrapper instance per run (registry.get)
+        return text
 
     @staticmethod
-    def _transcribe_stream(model, stream: BinaryIO, *, language: str | None, beam_size: int, task: str,
-                           temperature: float) -> str:
+    def _transcribe_stream(model, stream: BinaryIO, kwargs: dict, base_temperature: float, stats: dict) -> str:
         stream.seek(0)
-        segments, _info = model.transcribe(
-            stream,
-            language=language,
-            beam_size=beam_size,
-            task=task,
-            temperature=temperature,  # one value = no fallback schedule; matches the stored config
-            vad_filter=False,         # our own VAD chunking runs upstream
-            word_timestamps=False,
-        )
-        return " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+        segments, _info = model.transcribe(stream, **kwargs)
+        texts = []
+        for seg in segments:
+            stats["segments"] += 1
+            if (getattr(seg, "temperature", None) or 0.0) > base_temperature:
+                stats["fallback_segments"] += 1  # this segment was re-decoded at a higher temperature
+            if seg.text.strip():
+                texts.append(seg.text.strip())
+        return " ".join(texts)
+
+
+def output_stats(text: str) -> dict:
+    """Reference-free loop signal: output length and the longest run of one word repeated back to back
+    (case and punctuation ignored). "North, North, North" has a run of 3."""
+    words = ["".join(ch for ch in w.lower() if ch.isalnum()) for w in text.split()]
+    words = [w for w in words if w]
+    longest = run = 0
+    for i, w in enumerate(words):
+        run = run + 1 if i and w == words[i - 1] else 1
+        longest = max(longest, run)
+    return {"output_words": len(words), "longest_repeat": longest}
