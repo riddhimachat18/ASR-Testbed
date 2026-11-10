@@ -90,11 +90,14 @@ class RunRepo:
         )
         return res.rowcount == 1
 
-    def complete(self, run_id: str, transcript: str, latency: float, scores: dict | None = None) -> bool:
-        """Atomic processing->done, with scores (wer, cer, metrics) in the same statement so that a client
-        never sees 'done' without them. Returns False (and writes nothing) if the run is no longer
-        'processing', e.g. another worker already finished it. First writer wins."""
+    def complete(self, run_id: str, transcript: str, latency: float, scores: dict | None = None,
+                 profile: dict | None = None) -> bool:
+        """Atomic processing->done, with scores (wer, cer, metrics) and the profile (timings) in the same
+        statement so that a client never sees 'done' without them. Returns False (and writes nothing) if the run
+        is no longer 'processing', e.g. another worker already finished it. First writer wins."""
         extra = {"wer": scores["wer"], "cer": scores["cer"], "metrics": scores["metrics"]} if scores else {}
+        if profile is not None:
+            extra["profile"] = profile
         res = self.s.execute(
             update(TranscriptionRun)
             .where(TranscriptionRun.id == run_id, TranscriptionRun.status == RunStatus.processing)
@@ -102,12 +105,13 @@ class RunRepo:
         )
         return res.rowcount == 1
 
-    def mark_failed(self, run_id: str, error: str, latency: float) -> bool:
+    def mark_failed(self, run_id: str, error: str, latency: float, profile: dict | None = None) -> bool:
         """Atomic processing->failed, same guard as complete(). Never raises on a state mismatch."""
+        extra = {"profile": profile} if profile is not None else {}
         res = self.s.execute(
             update(TranscriptionRun)
             .where(TranscriptionRun.id == run_id, TranscriptionRun.status == RunStatus.processing)
-            .values(status=RunStatus.failed, error=error, latency=latency)
+            .values(status=RunStatus.failed, error=error, latency=latency, **extra)
         )
         return res.rowcount == 1
 

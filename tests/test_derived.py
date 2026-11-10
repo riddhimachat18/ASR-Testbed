@@ -267,6 +267,7 @@ def test_plain_stub_model_does_not_touch_the_cache(client, make_user):
 
 
 def test_run_fails_cleanly_when_the_vad_backend_is_missing(client, make_user):
+    client.app.state.queue.processor.preparer.vad_backends = {}  # as if silero-vad were not installed
     _, key = make_user("alice")
     r = _wait_done(client, key, _post(client, key, wav_bytes(5, 8000), model_version="stub-prepared").json()["run_id"])
     assert r["status"] == "failed" and "VAD backend 'silero' is not available" in r["error"]

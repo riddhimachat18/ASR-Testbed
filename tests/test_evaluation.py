@@ -44,7 +44,7 @@ def test_wer_value_end_to_end(client, make_user):
     assert run["wer"] == pytest.approx(1 / 5)
     with client.app.state.session_factory() as s:
         m = s.get(TranscriptionRun, sub["run_id"]).metrics
-        assert m["word_substitutions"] == 1 and m["ref_words"] == 5 and m["normalization"] == "basic-v1"
+        assert m["word_substitutions"] == 1 and m["ref_words"] == 5 and m["normalization"] == "whisper-en-v1"
 
 
 def test_run_without_reference_is_unscored(client, make_user):

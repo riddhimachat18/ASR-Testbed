@@ -106,10 +106,14 @@ class DerivedCache:
     def resampled_params(self, sample_rate: int) -> dict:
         return {"sample_rate": sample_rate, "channels": 1, "subtype": "PCM_16", "algo": RESAMPLE_ALGO_VERSION}
 
-    def resampled(self, source_key: str, checksum: str, sample_rate: int) -> BinaryIO:
-        """Open stream of the mono WAV at `sample_rate`, building it on first use. Caller closes it."""
+    def resampled(self, source_key: str, checksum: str, sample_rate: int,
+                  hits: dict[str, bool] | None = None) -> BinaryIO:
+        """Open stream of the mono WAV at `sample_rate`, building it on first use. Caller closes it.
+        `hits`, if given, records whether this was a cache hit (first lookup per kind wins)."""
         key = derived_key(checksum, "resampled", self.resampled_params(sample_rate), "wav")
         hit = self.storage.exists(key)
+        if hits is not None:
+            hits.setdefault("resampled", hit)
         if not hit:
             started = time.perf_counter()
             self._build_resampled(source_key, key, sample_rate)
@@ -140,7 +144,8 @@ class DerivedCache:
 
     # ---------------------------------------------------------------- chunk lists
     def chunks(self, source_key: str, checksum: str, chunking: ChunkingConfig, sample_rate: int,
-               vad_backends: dict[str, VadBackend] | None = None) -> list[Chunk]:
+               vad_backends: dict[str, VadBackend] | None = None,
+               hits: dict[str, bool] | None = None) -> list[Chunk]:
         backend = None
         if chunking.strategy == "vad":
             backend = (vad_backends or {}).get(chunking.vad.backend)
@@ -152,12 +157,14 @@ class DerivedCache:
         key = derived_key(checksum, "chunks", params, "json")
 
         cached = self._read_chunks(key, checksum, params)
+        if hits is not None:
+            hits.setdefault("chunks", cached is not None)
         if cached is not None:
             log_event(log, "derived.cache", kind="chunks", hit=True, key=key, n_chunks=len(cached))
             return cached
 
         started = time.perf_counter()
-        with self.resampled(source_key, checksum, sample_rate) as wav:
+        with self.resampled(source_key, checksum, sample_rate, hits=hits) as wav:
             duration = sf.info(wav).duration
             if chunking.strategy == "fixed":
                 chunks = plan_fixed_chunks(duration, chunking.max_chunk_s, chunking.overlap_s)
