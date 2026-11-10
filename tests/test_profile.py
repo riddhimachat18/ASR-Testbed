@@ -76,3 +76,19 @@ def test_leaderboard_keeps_normalizations_apart(client, make_user):
     lb = client.get("/datasets/d1/leaderboard", headers={"X-API-Key": key}).json()
     assert sorted(r["normalization"] for r in lb) == ["basic-v1", "whisper-en-v1"]
     assert all(r["runs"] == 1 for r in lb)
+
+
+def test_faster_whisper_run_records_decoder_stats(client, make_user, monkeypatch):
+    from app.pipeline import faster_whisper_wrapper as fw
+    from tests.test_hardware_options import _FakeModel, _Seg
+
+    monkeypatch.setattr(fw, "_get_model", lambda *a: _FakeModel([_Seg(" this is a dummy transcript")]))
+    _, key = make_user("alice")
+    sub = _post(client, key, reference="this is a dummy transcript", model_version="faster-whisper-tiny",
+                config=FIXED)
+    run = _wait_done(client, key, sub["run_id"])
+    assert run["status"] == "done" and run["wer"] == 0.0
+    p = _run(client, sub["run_id"]).profile
+    assert p["decoder"]["fallback_segments"] == 0 and p["decoder"]["longest_repeat"] == 1
+    assert p["decoder"]["segments"] == p["n_chunks"] >= 1
+    assert p["runtime"]["device"] == "cpu" and p["runtime"]["model_size"] == "tiny"

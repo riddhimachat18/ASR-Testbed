@@ -58,6 +58,8 @@ def print_report(d: dict) -> None:
         st = d.get("stages_s", {})
         print("  Stages:    " + "  ".join(f"{k} {_f(v.get('mean'))} s" for k, v in st.items()))
         print(f"  Cache:     hit rate {d.get('cache_hit_rate')}")
+    if d.get("loops"):
+        print(f"  Loops:     {d['loops']}")
     if d.get("throughput"):
         t = d["throughput"]
         print(f"  Throughput: {t['audio_hours']} h audio in {t['wall_hours']} h wall = "

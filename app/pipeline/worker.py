@@ -69,6 +69,8 @@ class RunProcessor:
                     t = time.perf_counter()
                     text = wrapper.transcribe(stream, cfg, prepared)
                     timings["inference_s"] = round(time.perf_counter() - t, 4)
+                if getattr(wrapper, "last_stats", None) is not None:
+                    profile["decoder"] = wrapper.last_stats  # segments, fallbacks, longest repeated word
                 t = time.perf_counter()
                 scores = self._score(s, audio_id, text)
                 timings["score_s"] = round(time.perf_counter() - t, 4)
