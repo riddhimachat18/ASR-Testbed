@@ -51,7 +51,7 @@ python scripts/run_baseline.py --model faster-whisper-base  --worker-concurrency
 python scripts/run_baseline.py --model faster-whisper-small --worker-concurrency 1
 python scripts/run_baseline.py --model faster-whisper-medium --worker-concurrency 1    # if VRAM allows
 python scripts/run_baseline.py --model <best> --beam-size 1 --worker-concurrency 1
-# decoding choice (Part H.7): fallback off + deterministic loop guard is the default; one sensitivity run with
+# decoding choice (Part H.7): fallback off + loop guard no_repeat_ngram_size=3 is the default; one sensitivity run with
 # Whisper's random temperature fallback, and one repeat of it to measure its run-to-run variance
 python scripts/run_baseline.py --model <best> --config '{"model_options":{"temperature_fallback":true}}' --worker-concurrency 1
 python scripts/run_baseline.py --model <best> --config '{"model_options":{"temperature_fallback":true}}' --worker-concurrency 1
