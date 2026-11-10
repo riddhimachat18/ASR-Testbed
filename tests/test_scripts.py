@@ -132,6 +132,16 @@ def test_summary_is_micro_averaged_with_stage_and_throughput_figures():
     assert s["normalization"] == "whisper-en-v1" and s["cache_hit_rate"]["chunks"] == 1.0
 
 
+def test_summary_counts_loops_separately_from_wer():
+    loop = _row("they knew no north", "they knew north north north north north north north north")
+    loop["profile"]["decoder"] = {"segments": 2, "fallback_segments": 0, "longest_repeat": 8}
+    ok = _row("a b c", "a b c")
+    ok["profile"]["decoder"] = {"segments": 1, "fallback_segments": 1, "longest_repeat": 1}
+    loops = summarize([loop, ok])["loops"]
+    assert loops == {"runaway_files": 1, "repeat_files": 1, "longest_repeat_max": 8, "fallback_files": 1,
+                     "fallback_rate": round(1 / 3, 4)}
+
+
 def test_summary_refuses_mixed_normalizations():
     with pytest.raises(MixedNormalization):
         summarize([_row("a", "a"), _row("a", "a", norm="basic-v1")])

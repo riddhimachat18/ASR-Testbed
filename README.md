@@ -25,6 +25,8 @@ GPU machine: see [docs/GPU.md](docs/GPU.md) (`ASR_ENV_FILE=.env.gpu`, `DEVICE=cu
 | Setting | Default | Effect |
 |---|---|---|
 | `DEVICE`, `COMPUTE_TYPE` | `cpu`, `int8` | Written into every faster-whisper run's `config.model_options`, so part of the config hash. Override per run with `model_options` |
+| `model_options.temperature_fallback` | `false` | Whisper's random retry at higher temperatures. Off keeps decoding deterministic and compute bounded (decision in design log H.7) |
+| `model_options.no_repeat_ngram_size`, `repetition_penalty` | `0`, `1.0` | Deterministic loop guard (per run, part of the hash) |
 | `VAD_DEVICE` | `cpu` | Keep `cpu` on every machine: identical chunk boundaries |
 | `NORMALIZER` | `whisper-en-v1` | Text normalization for new scores (`basic-v1` was used before Part H) |
 | `ASR_ENV_FILE` | `.env` | Which env file to read |

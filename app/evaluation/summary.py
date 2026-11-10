@@ -8,6 +8,10 @@ Rules, so that two summaries are comparable:
     wait). inference_rtf uses only the model's own time (profile.timings.inference_s), when recorded.
   * Throughput = audio hours / wall-clock hours from the first claim to the last completion. It depends on the
     worker count, so worker_concurrency is recorded next to it.
+  * Loops (Part H.7): micro-WER hides runaway outputs (one looping file added 103 errors to tiny on test-clean),
+    so they are counted on their own: files whose insertions exceed their reference length, and files whose
+    output repeats one word LOOP_REPEAT or more times in a row (reference-free, from the run profile). The
+    fallback rate is the share of decoded segments that needed a higher temperature (0 when fallback is off).
 """
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ import subprocess
 from datetime import datetime, timezone
 
 STAGES = ("prepare_s", "inference_s", "score_s")
+LOOP_REPEAT = 4  # a word repeated this many times back to back counts as a loop
 _ERR_KEYS = ("word_substitutions", "word_deletions", "word_insertions")
 _CHAR_ERR_KEYS = ("char_substitutions", "char_deletions", "char_insertions")
 
@@ -97,6 +102,17 @@ def summarize(rows: list[dict]) -> dict:
                  if (r["profile"].get("runtime") or {}).get("peak_rss_mb") is not None]
         out["peak_rss_mb_max"] = max(peaks) if peaks else None
 
+    out["loops"] = {"runaway_files": sum(r["metrics"].get("word_insertions", 0) > r["metrics"]["ref_words"]
+                                         for r in done)}
+    decoded = [r["profile"]["decoder"] for r in profiled if r["profile"].get("decoder")] if profiled else []
+    if decoded:
+        segs = sum(d.get("segments", 0) for d in decoded)
+        out["loops"].update({
+            "repeat_files": sum(d.get("longest_repeat", 0) >= LOOP_REPEAT for d in decoded),
+            "longest_repeat_max": max(d.get("longest_repeat", 0) for d in decoded),
+            "fallback_files": sum(d.get("fallback_segments", 0) > 0 for d in decoded),
+            "fallback_rate": round(sum(d.get("fallback_segments", 0) for d in decoded) / segs, 4) if segs else None,
+        })
     starts = [_ts(r.get("started_at")) for r in timed if r.get("started_at") is not None]
     ends = [_ts(r["started_at"]) + r["latency"] for r in timed if r.get("started_at") is not None]
     audio_s = sum(r["duration"] for r in done if r.get("duration"))
