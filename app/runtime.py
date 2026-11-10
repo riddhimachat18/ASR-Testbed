@@ -33,4 +33,7 @@ def build_runtime(settings: Settings, pool_size: int | None = None, max_overflow
     sf = make_session_factory(engine)
     storage = get_storage(settings)
     registry = ModelRegistry(settings)
-    return Runtime(settings, engine, sf, storage, registry, RunProcessor(sf, storage, registry, AudioPreparer(storage)))
+    preparer = AudioPreparer(storage, vad_device=settings.vad_device)
+    processor = RunProcessor(sf, storage, registry, preparer,
+                             normalization=settings.normalizer, vad_device=settings.vad_device)
+    return Runtime(settings, engine, sf, storage, registry, processor)
