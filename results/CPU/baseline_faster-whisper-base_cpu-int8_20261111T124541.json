@@ -1,0 +1,135 @@
+{
+  "model": "faster-whisper-base",
+  "dataset": "librispeech-test-clean",
+  "timestamp": "2026-11-11T12:45:40.396394+00:00",
+  "git_commit": "2ec38e5",
+  "config_hash": "253aabf1f5703e90e79c35c92648ec098ebc3748eb6360a3cd3d3fdfd67cbbe5",
+  "config": {
+    "schema_version": 1,
+    "audio": {
+      "sample_rate": 16000
+    },
+    "chunking": {
+      "strategy": "vad",
+      "max_chunk_s": 30.0,
+      "overlap_s": 0.0,
+      "vad": {
+        "backend": "silero",
+        "threshold": 0.5,
+        "min_speech_ms": 250,
+        "min_silence_ms": 100,
+        "speech_pad_ms": 30
+      }
+    },
+    "decoding": {
+      "beam_size": 5,
+      "temperature": 0.0,
+      "language": null,
+      "task": "transcribe"
+    },
+    "model_options": {
+      "device": "cpu",
+      "compute_type": "int8",
+      "temperature_fallback": false,
+      "no_repeat_ngram_size": 3,
+      "repetition_penalty": 1.0
+    }
+  },
+  "device": "cpu",
+  "compute_type": "int8",
+  "worker_concurrency": 1,
+  "limit": null,
+  "runs_total": 2620,
+  "runs_done": 2620,
+  "runs_failed": 0,
+  "runs_unscored": 0,
+  "normalization": "whisper-en-v1",
+  "wer": {
+    "micro": 0.0677,
+    "per_file_mean": 0.0801,
+    "p10": 0.0,
+    "p25": 0.0,
+    "p50": 0.0345,
+    "p75": 0.1111,
+    "p90": 0.2,
+    "p95": 0.2941
+  },
+  "cer": {
+    "micro": 0.0281
+  },
+  "errors": {
+    "substitutions": 2515,
+    "deletions": 393,
+    "insertions": 680
+  },
+  "latency_s": {
+    "mean": 4.22,
+    "p50": 3.128,
+    "p95": 11.3291
+  },
+  "rtf": {
+    "mean": 0.611,
+    "p50": 0.5723,
+    "p95": 1.1166,
+    "note": "rtf < 1.0 means faster than real-time"
+  },
+  "stages_s": {
+    "prepare_s": {
+      "mean": 0.0019,
+      "p50": 0.0016,
+      "p95": 0.0033
+    },
+    "inference_s": {
+      "mean": 4.2048,
+      "p50": 3.1039,
+      "p95": 11.312
+    },
+    "score_s": {
+      "mean": 0.0093,
+      "p50": 0.0065,
+      "p95": 0.0244
+    }
+  },
+  "inference_rtf": {
+    "mean": 0.608,
+    "p50": 0.569,
+    "p95": 1.1099
+  },
+  "cache_hit_rate": {
+    "chunks": 1.0,
+    "resampled": 1.0
+  },
+  "runtime": {
+    "python": "3.13.9",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "machine": "Riddhimas-MacBook-Air.local",
+    "libs": {
+      "faster-whisper": "1.2.1",
+      "ctranslate2": "4.8.4",
+      "torch": "2.15.0",
+      "silero-vad": "6.2.3",
+      "jiwer": "4.0.0",
+      "numpy": "2.5.4"
+    },
+    "vad_device": "cpu",
+    "device": "cpu",
+    "compute_type": "int8",
+    "gpu": null,
+    "model_size": "base"
+  },
+  "peak_rss_mb_max": 551.1,
+  "loops": {
+    "runaway_files": 1,
+    "repeat_files": 0,
+    "longest_repeat_max": 3,
+    "fallback_files": 0,
+    "fallback_rate": 0.0
+  },
+  "throughput": {
+    "audio_hours": 5.403,
+    "wall_hours": 3.086,
+    "audio_hours_per_wall_hour": 1.75
+  },
+  "total_ref_words": 53027,
+  "total_word_errors": 3588
+}
