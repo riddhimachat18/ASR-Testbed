@@ -1,0 +1,47 @@
+{
+  "model": "faster-whisper-tiny",
+  "dataset": "librispeech-test-clean",
+  "timestamp": "2026-11-10T20:37:31.771713+00:00",
+  "git_commit": "09f5e1d",
+  "config_hash": "89d2c16b169c61bc6ebb3a9c3f377ce05744d0a9248ebd742a59e48ceb913bf2",
+  "config": {
+    "schema_version": 1,
+    "audio": {
+      "sample_rate": 16000
+    },
+    "chunking": {
+      "strategy": "vad",
+      "max_chunk_s": 30.0,
+      "overlap_s": 0.0,
+      "vad": {
+        "backend": "silero",
+        "threshold": 0.5,
+        "min_speech_ms": 250,
+        "min_silence_ms": 100,
+        "speech_pad_ms": 30
+      }
+    },
+    "decoding": {
+      "beam_size": 5,
+      "temperature": 0.0,
+      "language": null,
+      "task": "transcribe"
+    },
+    "model_options": {
+      "device": "cuda",
+      "compute_type": "float16",
+      "temperature_fallback": false,
+      "no_repeat_ngram_size": 3,
+      "repetition_penalty": 1.0
+    }
+  },
+  "device": "cuda",
+  "compute_type": "float16",
+  "worker_concurrency": 1,
+  "limit": 20,
+  "runs_total": 20,
+  "runs_done": 0,
+  "runs_failed": 20,
+  "runs_unscored": 0,
+  "normalization": null
+}

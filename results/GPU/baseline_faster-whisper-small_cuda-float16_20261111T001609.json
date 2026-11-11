@@ -1,0 +1,135 @@
+{
+  "model": "faster-whisper-small",
+  "dataset": "librispeech-test-clean",
+  "timestamp": "2026-11-11T00:16:09.654127+00:00",
+  "git_commit": "09f5e1d",
+  "config_hash": "417d242b4951a90df3be4bd110080dfd04bca137d151078276c07254fc3e3272",
+  "config": {
+    "schema_version": 1,
+    "audio": {
+      "sample_rate": 16000
+    },
+    "chunking": {
+      "strategy": "vad",
+      "max_chunk_s": 30.0,
+      "overlap_s": 0.0,
+      "vad": {
+        "backend": "silero",
+        "threshold": 0.5,
+        "min_speech_ms": 250,
+        "min_silence_ms": 100,
+        "speech_pad_ms": 30
+      }
+    },
+    "decoding": {
+      "beam_size": 5,
+      "temperature": 0.0,
+      "language": null,
+      "task": "transcribe"
+    },
+    "model_options": {
+      "device": "cuda",
+      "compute_type": "float16",
+      "temperature_fallback": false,
+      "no_repeat_ngram_size": 3,
+      "repetition_penalty": 1.0
+    }
+  },
+  "device": "cuda",
+  "compute_type": "float16",
+  "worker_concurrency": 1,
+  "limit": null,
+  "runs_total": 2620,
+  "runs_done": 2620,
+  "runs_failed": 0,
+  "runs_unscored": 0,
+  "normalization": "whisper-en-v1",
+  "wer": {
+    "micro": 0.0426,
+    "per_file_mean": 0.0499,
+    "p10": 0.0,
+    "p25": 0.0,
+    "p50": 0.0,
+    "p75": 0.0667,
+    "p90": 0.1429,
+    "p95": 0.2222
+  },
+  "cer": {
+    "micro": 0.0159
+  },
+  "errors": {
+    "substitutions": 1636,
+    "deletions": 328,
+    "insertions": 294
+  },
+  "latency_s": {
+    "mean": 1.039,
+    "p50": 0.8371,
+    "p95": 2.5499
+  },
+  "rtf": {
+    "mean": 0.1519,
+    "p50": 0.1446,
+    "p95": 0.2428,
+    "note": "rtf < 1.0 means faster than real-time"
+  },
+  "stages_s": {
+    "prepare_s": {
+      "mean": 0.005,
+      "p50": 0.0046,
+      "p95": 0.0084
+    },
+    "inference_s": {
+      "mean": 1.0192,
+      "p50": 0.8172,
+      "p95": 2.5276
+    },
+    "score_s": {
+      "mean": 0.0042,
+      "p50": 0.004,
+      "p95": 0.006
+    }
+  },
+  "inference_rtf": {
+    "mean": 0.148,
+    "p50": 0.1407,
+    "p95": 0.2373
+  },
+  "cache_hit_rate": {
+    "chunks": 1.0,
+    "resampled": 1.0
+  },
+  "runtime": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "machine": "LAPTOP-QINGKAH6",
+    "libs": {
+      "faster-whisper": "1.2.1",
+      "ctranslate2": "4.8.5",
+      "torch": "2.5.1+cu121",
+      "silero-vad": "6.2.3",
+      "jiwer": "4.0.0",
+      "numpy": "2.4.6"
+    },
+    "vad_device": "cpu",
+    "device": "cuda",
+    "compute_type": "float16",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "model_size": "small"
+  },
+  "peak_rss_mb_max": null,
+  "loops": {
+    "runaway_files": 0,
+    "repeat_files": 0,
+    "longest_repeat_max": 3,
+    "fallback_files": 0,
+    "fallback_rate": 0.0
+  },
+  "throughput": {
+    "audio_hours": 5.403,
+    "wall_hours": 0.773,
+    "audio_hours_per_wall_hour": 6.99
+  },
+  "total_ref_words": 53027,
+  "total_word_errors": 2258
+}
