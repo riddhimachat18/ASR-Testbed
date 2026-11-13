@@ -34,6 +34,16 @@ Design decisions
   Loading takes 1 to 5 s. One model per (size, device, compute_type) per process, lock-guarded. In Celery each child
   process loads it on its first task.
 
+* Model internals are timed, not just the call (instrument_model)
+  faster-whisper's transcribe() hides four steps: decode the audio bytes, compute the 80-bin log-mel features,
+  run the ENCODER once per 30 s window (cost fixed per window: short audio is padded with silence), and run the
+  DECODER token by token (cost grows with output length and beam size, and repeats on a temperature fallback).
+  At model load we wrap the model's own feature_extractor, encode, detect_language and generate_with_fallback
+  methods so each call becomes a span in the run's trace (app/observability/tracing.py), with what it processed:
+  frames per encoder call, tokens out, avg log-prob, compression ratio, final temperature, no-speech probability.
+  The wrappers only time and observe; inputs and outputs pass through unchanged. If faster-whisper renames a
+  method, that span is simply missing (and a warning is logged), never an error.
+
 * Chunk slicing and stitching
   We seek to each chunk's sample range and pass a WAV slice to faster-whisper, so one chunk is in memory at a time.
   Chunk transcripts are joined with a single space. VAD chunks do not overlap, so no de-duplication is needed.
@@ -47,6 +57,7 @@ from typing import BinaryIO, Literal
 
 from pydantic import BaseModel, Field, create_model, model_validator
 
+from app.observability.tracing import span
 from app.pipeline.model_wrapper import ModelWrapper
 from app.pipeline.prepare import Prepared
 from app.pipeline.run_config import RunConfig, Strict
@@ -108,8 +119,95 @@ def _get_model(model_size: str, device: str, compute_type: str):
             if cache_key not in _models:
                 log.info("loading faster-whisper model",
                          extra={"model_size": model_size, "device": device, "compute_type": compute_type})
-                _models[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type)
+                _models[cache_key] = instrument_model(
+                    WhisperModel(model_size, device=device, compute_type=compute_type))
     return _models[cache_key]
+
+
+def is_loaded(model_size: str, device: str, compute_type: str) -> bool:
+    return f"{model_size}/{device}/{compute_type}" in _models
+
+
+class _TimedFeatureExtractor:
+    """Proxy for faster-whisper's FeatureExtractor: times __call__ (log-mel), forwards every attribute."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __call__(self, audio, *args, **kwargs):
+        with span("model.features", audio_s=round(len(audio) / self._inner.sampling_rate, 3)) as a:
+            out = self._inner(audio, *args, **kwargs)
+            a["frames"] = int(out.shape[-1])
+        return out
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def _instrument_decode_audio() -> None:
+    """faster-whisper decodes WAV bytes with PyAV (module-level function); time it once, process-wide."""
+    import faster_whisper.transcribe as fwt
+
+    original = fwt.decode_audio
+    if getattr(original, "_asr_timed", False):
+        return
+
+    def decode_audio(*args, **kwargs):
+        with span("model.audio_decode"):
+            return original(*args, **kwargs)
+
+    decode_audio._asr_timed = True
+    fwt.decode_audio = decode_audio
+
+
+def instrument_model(model):
+    """Turn the model's internal steps into trace spans (see module docstring). Idempotent."""
+    if getattr(model, "_asr_instrumented", False):
+        return model
+    try:
+        _instrument_decode_audio()
+    except Exception:  # noqa: BLE001
+        log.warning("could not instrument faster_whisper.transcribe.decode_audio")
+    missing = [m for m in ("feature_extractor", "encode", "detect_language", "generate_with_fallback")
+               if not hasattr(model, m)]
+    if missing:
+        log.warning("faster-whisper internals not found; these spans will be missing", extra={"missing": missing})
+    if hasattr(model, "feature_extractor"):
+        model.feature_extractor = _TimedFeatureExtractor(model.feature_extractor)
+    if hasattr(model, "encode"):
+        encode = model.encode
+
+        def timed_encode(features):
+            with span("model.encode", frames=int(features.shape[-1])):
+                return encode(features)
+        model.encode = timed_encode
+    if hasattr(model, "detect_language"):
+        detect_language = model.detect_language
+
+        def timed_detect_language(*args, **kwargs):
+            with span("model.language_detect") as a:
+                out = detect_language(*args, **kwargs)
+                if isinstance(out, tuple) and out:
+                    a["language"] = out[0]
+                return out
+        model.detect_language = timed_detect_language
+    if hasattr(model, "generate_with_fallback"):
+        generate = model.generate_with_fallback
+
+        def timed_generate(encoder_output, prompt, tokenizer, options):
+            with span("model.decode", prompt_tokens=len(prompt), beam_size=getattr(options, "beam_size", None)) as a:
+                out = generate(encoder_output, prompt, tokenizer, options)
+                try:
+                    result, avg_logprob, temperature, compression_ratio = out
+                    a.update(tokens=len(result.sequences_ids[0]), avg_logprob=float(avg_logprob),
+                             temperature=float(temperature), compression_ratio=float(compression_ratio),
+                             no_speech_prob=float(getattr(result, "no_speech_prob", 0.0)))
+                except Exception:  # noqa: BLE001  observation only
+                    pass
+                return out
+        model.generate_with_fallback = timed_generate
+    model._asr_instrumented = True
+    return model
 
 
 def _read_chunk_bytes(wav_stream: BinaryIO, start_s: float, end_s: float, sample_rate: int) -> bytes:
@@ -163,7 +261,9 @@ class FasterWhisperWrapper(ModelWrapper):
 
     def transcribe(self, audio: BinaryIO, config: RunConfig, prepared: Prepared | None = None) -> str:
         device, compute_type = self.resolve_hardware(config)
-        model = _get_model(self.model_size, device, compute_type)
+        with span("model.get", model_size=self.model_size, device=device, compute_type=compute_type,
+                  cold=not is_loaded(self.model_size, device, compute_type)):
+            model = _get_model(self.model_size, device, compute_type)
         kwargs = self.decode_kwargs(config)
         base_temperature = config.decoding.temperature
         sample_rate = prepared.sample_rate if prepared else config.audio.sample_rate
@@ -172,12 +272,16 @@ class FasterWhisperWrapper(ModelWrapper):
 
         if not chunks:  # no chunk plan (or an empty one): transcribe the whole file in one shot
             audio.seek(0)
-            parts = [self._transcribe_stream(model, audio, kwargs, base_temperature, stats)]
+            with span("chunk", index=0, whole_file=True):
+                parts = [self._transcribe_stream(model, audio, kwargs, base_temperature, stats)]
         else:
             parts = []
-            for chunk in chunks:
-                chunk_buf = io.BytesIO(_read_chunk_bytes(audio, chunk.start, chunk.end, sample_rate))
-                parts.append(self._transcribe_stream(model, chunk_buf, kwargs, base_temperature, stats))
+            for i, chunk in enumerate(chunks):
+                with span("chunk", index=i, start_s=chunk.start, end_s=chunk.end,
+                          audio_s=round(chunk.end - chunk.start, 3)):
+                    with span("chunk.slice"):
+                        chunk_buf = io.BytesIO(_read_chunk_bytes(audio, chunk.start, chunk.end, sample_rate))
+                    parts.append(self._transcribe_stream(model, chunk_buf, kwargs, base_temperature, stats))
         text = " ".join(p for p in parts if p)
         self.last_stats = {**stats, **output_stats(text)}  # one wrapper instance per run (registry.get)
         return text

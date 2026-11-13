@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from .models import Audio, RunStatus, TranscriptionRun, User
+from .models import Audio, AudioFeatures, RunStatus, StageEvent, TranscriptionRun, User
 
 ALLOWED_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
     RunStatus.queued: {RunStatus.processing, RunStatus.failed},
@@ -122,3 +122,33 @@ class RunRepo:
     def fail(self, run: TranscriptionRun, error: str, latency: float) -> None:
         self.transition(run, RunStatus.failed)
         run.error, run.latency = error, latency
+
+
+class StageEventRepo:
+    def __init__(self, s: Session):
+        self.s = s
+
+    def add_all(self, rows: list[dict]) -> None:
+        """Insert one run attempt's spans (Trace.rows()) in one statement."""
+        if rows:
+            self.s.execute(StageEvent.__table__.insert(), rows)
+
+
+class AudioFeaturesRepo:
+    def __init__(self, s: Session):
+        self.s = s
+
+    def get(self, audio_id: str) -> AudioFeatures | None:
+        return self.s.get(AudioFeatures, audio_id)
+
+    def upsert(self, audio_id: str, features: dict) -> AudioFeatures:
+        row = self.s.get(AudioFeatures, audio_id)
+        if row is None:
+            row = AudioFeatures(audio_id=audio_id, **features)
+            self.s.add(row)
+        else:
+            for k, v in features.items():
+                setattr(row, k, v)
+            row.computed_at = datetime.now(timezone.utc)
+        self.s.flush()
+        return row

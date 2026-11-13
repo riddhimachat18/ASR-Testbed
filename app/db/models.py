@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import (JSON, DateTime, Enum, Float, ForeignKey, Index,
+from sqlalchemy import (JSON, BigInteger, DateTime, Enum, Float, ForeignKey, Index,
                         Integer, String, Text, UniqueConstraint)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -107,3 +107,44 @@ class TranscriptionRun(Base):
     audio: Mapped[Audio] = relationship(back_populates="runs")
 
     __table_args__ = (Index("ix_runs_status_created", "status", "created_at"),)
+
+
+class StageEvent(Base):
+    """One timed step of one run attempt (app/observability/tracing.py): queue wait, cache lookups, VAD, each
+    chunk's feature extraction, encoder and decoder calls, scoring, database writes. Spans nest via parent_seq."""
+    __tablename__ = "stage_events"
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True,
+                                    autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("transcription_runs.id", ondelete="CASCADE"))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    seq: Mapped[int] = mapped_column(Integer)                   # order within the attempt
+    parent_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stage: Mapped[str] = mapped_column(String(64))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[float] = mapped_column(Float)
+    worker: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    attrs: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # tokens, cache hit, chunk bounds, ...
+
+    __table_args__ = (Index("ix_stage_events_run", "run_id", "attempt", "seq"),
+                      Index("ix_stage_events_started", "started_at"),
+                      Index("ix_stage_events_stage_started", "stage", "started_at"))
+
+
+class AudioFeatures(Base):
+    """Descriptive features of one audio file (app/pipeline/audio_features.py), computed once and reused: level,
+    speech ratio, noise estimate, spectrum, and how the chunk plan maps onto Whisper's 30 s windows."""
+    __tablename__ = "audio_features"
+    audio_id: Mapped[str] = mapped_column(ForeignKey("audio.id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    duration_s: Mapped[float] = mapped_column(Float)
+    rms_dbfs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    peak_dbfs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    clip_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    speech_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    n_speech_segments: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    snr_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spectral_centroid_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
+    n_chunks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    padding_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)  # 30 s x windows / duration
+    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)

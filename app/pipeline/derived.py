@@ -34,6 +34,7 @@ import soundfile as sf
 import soxr
 
 from app.observability.logging import log_event
+from app.observability.tracing import span
 from app.pipeline.run_config import ChunkingConfig, VadConfig
 from app.storage.base import BlobExistsError, StorageBackend
 
@@ -111,17 +112,21 @@ class DerivedCache:
         """Open stream of the mono WAV at `sample_rate`, building it on first use. Caller closes it.
         `hits`, if given, records whether this was a cache hit (first lookup per kind wins)."""
         key = derived_key(checksum, "resampled", self.resampled_params(sample_rate), "wav")
-        hit = self.storage.exists(key)
-        if hits is not None:
-            hits.setdefault("resampled", hit)
-        if not hit:
-            started = time.perf_counter()
-            self._build_resampled(source_key, key, sample_rate)
-            log_event(log, "derived.cache", kind="resampled", hit=False, key=key,
-                      build_s=round(time.perf_counter() - started, 3))
-        else:
-            log_event(log, "derived.cache", kind="resampled", hit=True, key=key)
-        return self.storage.get_audio(key)
+        with span("cache.resampled", tier="storage") as a:
+            hit = self.storage.exists(key)
+            a["hit"] = hit
+            if hits is not None:
+                hits.setdefault("resampled", hit)
+            if not hit:
+                started = time.perf_counter()
+                with span("resample.build", sample_rate=sample_rate):
+                    self._build_resampled(source_key, key, sample_rate)
+                log_event(log, "derived.cache", kind="resampled", hit=False, key=key,
+                          build_s=round(time.perf_counter() - started, 3))
+            else:
+                log_event(log, "derived.cache", kind="resampled", hit=True, key=key)
+            with span("storage.open", what="resampled"):
+                return self.storage.get_audio(key)
 
     def _build_resampled(self, source_key: str, key: str, sample_rate: int) -> None:
         with self.storage.get_audio(source_key) as src_stream, sf.SoundFile(src_stream) as src, \
@@ -156,7 +161,9 @@ class DerivedCache:
                   "algo": CHUNK_ALGO_VERSION, "resample_algo": RESAMPLE_ALGO_VERSION}
         key = derived_key(checksum, "chunks", params, "json")
 
-        cached = self._read_chunks(key, checksum, params)
+        with span("cache.chunks", tier="storage") as a:
+            cached = self._read_chunks(key, checksum, params)
+            a["hit"] = cached is not None
         if hits is not None:
             hits.setdefault("chunks", cached is not None)
         if cached is not None:
@@ -170,7 +177,11 @@ class DerivedCache:
                 chunks = plan_fixed_chunks(duration, chunking.max_chunk_s, chunking.overlap_s)
             else:
                 wav.seek(0)
-                chunks = plan_vad_chunks(backend.detect_speech_segments(wav, chunking.vad), chunking.max_chunk_s)
+                with span("vad.detect", backend=chunking.vad.backend, audio_s=round(duration, 3)) as a:
+                    segments = backend.detect_speech_segments(wav, chunking.vad)
+                    a["segments"] = len(segments)
+                with span("chunk.plan"):
+                    chunks = plan_vad_chunks(segments, chunking.max_chunk_s)
         payload = {"format": 1, "source_sha256": checksum, "params": params, "duration_s": round(duration, 3),
                    "chunks": [{"start": c.start, "end": c.end} for c in chunks]}
         try:
