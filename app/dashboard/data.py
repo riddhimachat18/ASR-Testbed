@@ -151,7 +151,7 @@ def _features_by(s, key: str) -> dict:
 class DashboardData:
     """Caches the (cheap but not free) group scan for a few seconds; exports are cached until their file changes."""
 
-    def __init__(self, session_factory, exports_dir: str | None, ttl_s: float = 5.0):
+    def __init__(self, session_factory, exports_dir: str | None, ttl_s: float = 15.0):
         self.sf, self.exports_dir, self.ttl = session_factory, exports_dir, ttl_s
         self._lock = threading.Lock()
         self._db_cache: tuple[float, list[dict]] | None = None
@@ -159,43 +159,49 @@ class DashboardData:
 
     # db --------------------------------------------------------------------
     def _db_groups(self) -> list[dict]:
+        """One aggregate per (model, config hash, normalization, dataset). JSON fields are extracted in SQL, so a
+        scan of tens of thousands of runs stays cheap: the dashboard must not slow down the worker it measures
+        when both run on one laptop."""
         with self._lock:
             if self._db_cache and time.monotonic() - self._db_cache[0] < self.ttl:
                 return self._db_cache[1]
-        q = (select(Run.model_version, Run.config_hash, Run.status, Run.wer, Run.metrics, Run.latency, Run.profile,
-                    Run.config, Audio.duration, Dataset.name, Run.created_at)
+        m, cfg, prof = Run.metrics, Run.config, Run.profile
+        q = (select(Run.model_version, Run.config_hash, Run.status, Run.latency, Audio.duration, Dataset.name,
+                    Run.created_at, m["normalization"].as_string(), m["ref_words"].as_integer(),
+                    m["word_substitutions"].as_integer(), m["word_deletions"].as_integer(),
+                    m["word_insertions"].as_integer(), prof[("timings", "inference_s")].as_float(),
+                    cfg[("model_options", "device")].as_string(), cfg[("model_options", "compute_type")].as_string(),
+                    prof[("runtime", "machine")].as_string(), cfg[("decoding", "language")].as_string())
              .join(Audio, Audio.id == Run.audio_id).outerjoin(Dataset, Dataset.id == Audio.dataset_id))
         agg: dict[tuple, dict] = {}
         with self.sf() as s:
             traced_groups = set(s.execute(
                 select(Run.model_version, Run.config_hash).join(StageEvent, StageEvent.run_id == Run.id)
                 .where(StageEvent.stage == "run").distinct()).all())
-            for model, h, status, wer, metrics, latency, profile, config, dur, dataset, created in s.execute(q):
-                norm = (metrics or {}).get("normalization")
+            for (model, h, status, latency, dur, dataset, created, norm, ref_words, subs, dels, ins, inf,
+                 device, compute, machine, language) in s.execute(q):
                 key = (model, h, norm, dataset)
                 g = agg.get(key)
                 if g is None:
-                    device, compute = _device_of(profile, config)
+                    device = device or "cpu"
                     g = agg[key] = {"src": "db", "model": model, "config_hash": h, "normalization": norm,
-                                    "dataset": dataset, "device": device, "compute_type": compute,
-                                    "machine": ((profile or {}).get("runtime") or {}).get("machine"),
+                                    "dataset": dataset, "device": device,
+                                    "compute_type": compute or ("int8" if device == "cpu" else "?"),
+                                    "machine": machine, "language": language,
                                     "n": 0, "done": 0, "failed": 0, "queued": 0, "processing": 0,
                                     "errors": 0, "ref_words": 0, "latencies": [], "audio_s": 0.0,
-                                    "infer_s": 0.0, "last": None, "traced": (model, h) in traced_groups,
-                                    "decoding": (config or {}).get("decoding"),
-                                    "model_options": (config or {}).get("model_options")}
+                                    "infer_s": 0.0, "last": None, "traced": (model, h) in traced_groups}
                 g["n"] += 1
                 g[status.value] += 1
-                g["last"] = max(filter(None, [g["last"], _utc(created)]), default=None)
+                created = _utc(created)
+                if created and (g["last"] is None or created > g["last"]):
+                    g["last"] = created
                 if status is RunStatus.done:
-                    m = metrics or {}
-                    if m.get("ref_words") is not None:
-                        g["errors"] += (m.get("word_substitutions", 0) + m.get("word_deletions", 0)
-                                        + m.get("word_insertions", 0))
-                        g["ref_words"] += m["ref_words"]
+                    if ref_words is not None:
+                        g["errors"] += (subs or 0) + (dels or 0) + (ins or 0)
+                        g["ref_words"] += ref_words
                     if latency is not None:
                         g["latencies"].append(latency)
-                    inf = ((profile or {}).get("timings") or {}).get("inference_s")
                     if inf is not None and dur:
                         g["infer_s"] += inf
                         g["audio_s"] += dur
@@ -219,7 +225,8 @@ class DashboardData:
                  latency_mean=_r(sum(lat) / len(lat)) if lat else None,
                  rtf=_r(infer_s / audio_s) if audio_s else None, last=_iso(last) if isinstance(last, datetime) else last,
                  label=f"{(g['model'] or '?').replace('faster-whisper-', '')} · {g['device']} {g['compute_type']} · "
-                       f"{h[:8]} · {machine}")
+                       f"{h[:8]} · {machine}"
+                       + (f" · {g['dataset'].replace('librispeech-', '')}" if g.get("dataset") else ""))
         return g
 
     # exports ---------------------------------------------------------------
@@ -271,7 +278,8 @@ class DashboardData:
     def groups(self) -> list[dict]:
         db = self._db_groups()
         return sorted(db + self._export_groups(db),
-                      key=lambda g: (g["src"] != "db", g["model"] or "", g["device"], g["config_hash"] or ""))
+                      key=lambda g: (g["src"] != "db", not g.get("traced"), g["model"] or "", g["device"],
+                                     g["config_hash"] or "", g.get("dataset") or ""))
 
     # rows ------------------------------------------------------------------
     def rows(self, group_key: str) -> list[dict]:

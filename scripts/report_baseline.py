@@ -58,6 +58,12 @@ def print_report(d: dict) -> None:
         st = d.get("stages_s", {})
         print("  Stages:    " + "  ".join(f"{k} {_f(v.get('mean'))} s" for k, v in st.items()))
         print(f"  Cache:     hit rate {d.get('cache_hit_rate')}")
+        if d.get("self_time_s"):
+            st = d["self_time_s"]
+            print(f"  Self time per stage ({st['runs']} traced runs, mean per run, share of processing):")
+            for k, v in st["stages"].items():
+                share = "" if v["share"] is None else f"  {100 * v['share']:5.1f}%"
+                print(f"    {k:<24} {v['mean']:8.3f} s{share}")
     if d.get("loops"):
         print(f"  Loops:     {d['loops']}")
     if d.get("throughput"):

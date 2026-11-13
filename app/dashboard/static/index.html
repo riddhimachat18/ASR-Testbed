@@ -257,9 +257,9 @@ async function loadGroups() {
   S.groups = await getJSON("groups");
   const visible = visibleGroups();
   if (!S.selected.length) {
-    // default: newest traced db group first, else the first one
-    const pick = visible.filter(g => g.src === "db" && g.traced).sort((a, b) => (b.last || "").localeCompare(a.last || ""))[0] || visible[0];
-    if (pick) S.selected = [pick.key];
+    // default: the two newest traced groups in this database, else the first group
+    const traced = visible.filter(g => g.src === "db" && g.traced).sort((a, b) => (b.last || "").localeCompare(a.last || ""));
+    S.selected = (traced.length ? traced.slice(0, 2) : visible.slice(0, 1)).map(g => g.key);
   }
   renderPicker();
   await loadSelected();
@@ -292,13 +292,13 @@ function renderLegends() {
 function renderGroupTable() {
   renderLegends();
   const rows = S.selected.map(k => groupByKey(k)).filter(Boolean);
-  const cols = ["Group", "Source", "Runs", "Failed", "WER", "Latency p50 (s)", "p95 (s)", "Inference RTF", "Chunks/run", "Queue p50 (s)", "Encoder share", "Decoder tok/s", "Padding ×"];
+  const cols = ["Group", "Source", "Language", "Runs", "Failed", "WER", "Latency p50 (s)", "p95 (s)", "Inference RTF", "Chunks/run", "Queue p50 (s)", "Encoder share", "Decoder tok/s", "Padding ×"];
   const body = rows.map(g => {
     const rs = (S.rows[g.key] || []).filter(r => r.status === "done");
     const traced = rs.filter(r => r.stages);
     const proc = sum(traced.map(r => sum(Object.entries(r.stages).filter(([k]) => k !== "queue_wait").map(([, v]) => v))));
     const enc = sum(traced.map(r => (r.stages["model.encode"] || 0)));
-    return `<tr><td><span class="sw-inline" style="background:${colorOfGroup(g.key)}"></span>${esc(g.label)}</td><td title="${esc(g.file || "")}">${g.src === "db" ? "this DB" : "export"}</td>
+    return `<tr><td><span class="sw-inline" style="background:${colorOfGroup(g.key)}"></span>${esc(g.label)}</td><td title="${esc(g.file || "")}">${g.src === "db" ? "this DB" : "export"}</td><td>${g.src === "db" ? esc(g.language || "auto-detect") : "—"}</td>
       <td>${g.done}</td><td>${g.failed}</td><td>${pct(g.wer)}</td><td>${fmt(g.latency_p50)}</td><td>${fmt(g.latency_p95)}</td><td>${fmt(g.rtf, 3)}</td>
       <td>${fmt(mean(rs.map(r => r.n_chunks)))}</td><td>${fmt(median(rs.map(r => r.queue_ms == null ? null : r.queue_ms / 1000)))}</td>
       <td>${traced.length ? pct(enc / proc, 1) : "—"}</td><td>${fmt(median(rs.map(r => r.tokens_per_s)), 0)}</td><td>${fmt(median(rs.map(r => r.f_padding_ratio)), 1)}</td></tr>`;
@@ -576,8 +576,8 @@ let refreshTimer = null;
 function scheduleGroupRefresh() {
   if (refreshTimer) return;
   // Counts refresh quietly; per-run rows reload only on request, so an exploration in progress is not reset.
-  refreshTimer = setTimeout(async () => { refreshTimer = null; S.groups = await getJSON("groups"); renderPicker();
-    if (S.selected.some(k => k.startsWith("db|"))) $("refreshBtn").textContent = "New runs: reload charts"; }, 10000);
+  // Nothing is re-queried automatically: a full group scan while a benchmark runs would compete with the worker.
+  refreshTimer = setTimeout(() => { refreshTimer = null; $("refreshBtn").textContent = "New runs: reload charts"; }, 1000);
 }
 function renderLive() {
   const L = S.live, now = L.now || Date.now();

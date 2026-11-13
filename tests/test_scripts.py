@@ -150,6 +150,16 @@ def test_summary_is_micro_averaged_with_stage_and_throughput_figures():
     assert s["normalization"] == "whisper-en-v1" and s["cache_hit_rate"]["chunks"] == 1.0
 
 
+def test_summary_reports_self_time_per_stage_for_traced_runs():
+    rows = [_row("a b", "a b", start=0), _row("a b", "a b", start=1)]
+    rows[0]["profile"]["stages"] = {"model.encode": 0.6, "model.decode": 0.3, "queue_wait": 5.0, "score": 0.1}
+    rows[1]["profile"]["stages"] = {"model.encode": 0.4, "model.decode": 0.5, "score": 0.1}
+    st = summarize(rows)["self_time_s"]
+    assert st["runs"] == 2 and list(st["stages"])[0] == "queue_wait"      # largest first
+    assert st["stages"]["model.encode"] == {"mean": 0.5, "share": 0.5}       # of 2.0 s processing, queue excluded
+    assert st["stages"]["queue_wait"]["share"] is None
+
+
 def test_summary_counts_loops_separately_from_wer():
     loop = _row("they knew no north", "they knew north north north north north north north north")
     loop["profile"]["decoder"] = {"segments": 2, "fallback_segments": 0, "longest_repeat": 8}

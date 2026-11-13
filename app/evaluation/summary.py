@@ -98,6 +98,17 @@ def summarize(rows: list[dict]) -> dict:
                                  for k in ("chunks", "resampled")}
         out["runtime"] = {k: v for k, v in (profiled[0]["profile"].get("runtime") or {}).items()
                           if k != "peak_rss_mb"}
+        traced = [r["profile"]["stages"] for r in profiled if r["profile"].get("stages")]
+        if traced:  # self time per stage (app/observability/tracing.py), mean seconds per run, largest first
+            totals: dict[str, float] = {}
+            for st in traced:
+                for k, v in st.items():
+                    totals[k] = totals.get(k, 0.0) + v
+            processing = sum(v for k, v in totals.items() if k != "queue_wait") or 1.0
+            out["self_time_s"] = {"runs": len(traced), "stages": {
+                k: {"mean": round(v / len(traced), 4),
+                    "share": None if k == "queue_wait" else round(v / processing, 4)}
+                for k, v in sorted(totals.items(), key=lambda kv: -kv[1])}}
         peaks = [r["profile"]["runtime"].get("peak_rss_mb") for r in profiled
                  if (r["profile"].get("runtime") or {}).get("peak_rss_mb") is not None]
         out["peak_rss_mb_max"] = max(peaks) if peaks else None
