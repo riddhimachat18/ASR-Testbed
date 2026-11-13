@@ -166,7 +166,10 @@ def main() -> None:
     opts = cfg.get("model_options", {})
     log.info("model=%s config_hash=%s options=%s decoding=%s", a.model, cfg_hash[:12], opts, cfg["decoding"])
 
-    run_ids = (existing_runs if a.no_submit else submit_runs)(sf, a.dataset, a.model, cfg, cfg_hash, a.limit)
+    if a.no_submit:
+        run_ids = existing_runs(sf, a.dataset, a.model, cfg_hash, a.limit)
+    else:
+        run_ids = submit_runs(sf, a.dataset, a.model, cfg, cfg_hash, a.limit)
     if a.no_wait:
         log.info("submitted; re-run with --no-submit to wait and report")
         return
