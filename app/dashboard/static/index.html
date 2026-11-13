@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASR Testbed · Pipeline Dashboard</title>
+<script src="/dashboard/static/echarts.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f4f3f0; --surface-1: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc; --grid: #ecebe7;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7b7a75;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --neutral: #a9a8a1; --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --accent-soft: #cde2fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #121211; --surface-1: #1a1a19; --surface-2: #232321; --border: #2f2f2c; --grid: #2a2a28;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --neutral: #6b6a64; --accent-soft: #184f95;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #121211; --surface-1: #1a1a19; --surface-2: #232321; --border: #2f2f2c; --grid: #2a2a28;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --neutral: #6b6a64; --accent-soft: #184f95;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+header { position: sticky; top: 0; z-index: 10; background: var(--page); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+header .sub { color: var(--text-muted); font-size: 13px; }
+header .spacer { flex: 1; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neutral); }
+.dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+button, select { font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { background: var(--surface-2); }
+nav { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--page);
+  position: sticky; top: 53px; z-index: 9; }
+nav a { padding: 10px 12px; color: var(--text-secondary); text-decoration: none; font-size: 13px; border-bottom: 2px solid transparent; }
+nav a:hover { color: var(--text-primary); }
+main { padding: 16px 24px 64px; max-width: 1680px; margin: 0 auto; }
+section { margin-top: 28px; }
+section > h2 { font-size: 15px; margin: 0 0 4px; font-weight: 650; }
+section > p.lede { margin: 0 0 12px; color: var(--text-secondary); font-size: 13px; max-width: 980px; }
+.grid { display: grid; gap: 12px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.g6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.span2 { grid-column: span 2; }
+@media (max-width: 1100px) { .g2, .g3, .g4 { grid-template-columns: 1fr; } .g6 { grid-template-columns: repeat(3, 1fr); } .span2 { grid-column: auto; } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.card .note { margin: 0 0 6px; color: var(--text-muted); font-size: 12px; }
+.chart { width: 100%; height: 300px; }
+.chart.tall { height: 380px; }
+.chart.short { height: 220px; }
+.tile { padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tile .hint { color: var(--text-muted); font-size: 12px; }
+.groups { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface-1);
+  padding: 4px 10px; border-radius: 999px; font-size: 12.5px; cursor: pointer; user-select: none; }
+.gchip.sel { border-color: var(--text-secondary); background: var(--surface-2); }
+.gchip .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--neutral); }
+.gchip small { color: var(--text-muted); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); cursor: default; }
+th.sortable { cursor: pointer; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+.scroll { max-height: 340px; overflow: auto; }
+.muted { color: var(--text-muted); }
+.sw-inline { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.feed { font-size: 12.5px; max-height: 300px; overflow: auto; }
+.feed div { cursor: pointer; display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+.feed .t { color: var(--text-muted); width: 62px; }
+.feed .u { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff { font-size: 13px; line-height: 1.7; }
+.diff .del { background: color-mix(in srgb, var(--critical) 18%, transparent); text-decoration: line-through; padding: 0 2px; border-radius: 3px; }
+.diff .ins { background: color-mix(in srgb, var(--s1) 20%, transparent); padding: 0 2px; border-radius: 3px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; }
+.kv span:nth-child(odd) { color: var(--text-secondary); }
+.empty { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
+.pill { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-secondary); margin-left: 6px; }
+.legendbar { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin: 0 0 10px; }
+.wf { max-height: 560px; overflow: auto; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ASR Testbed</h1><span class="sub">Pipeline dashboard</span>
+  <span class="spacer"></span>
+  <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">connecting…</span></span>
+  <button id="themeBtn" title="Switch light / dark">Theme</button>
+</header>
+<nav>
+  <a href="#live">Live</a><a href="#compare">Compare</a><a href="#time">Where the time goes</a>
+  <a href="#explore">Linked explorer</a><a href="#run">Run detail</a><a href="#data">Data</a><a href="#internals">Model internals</a>
+</nav>
+<main>
+
+<section id="live">
+  <h2>Live pipeline</h2>
+  <p class="lede">Updated every second from the stage events workers write as runs finish. Each bar in the timeline is one run on one worker process; click it to open the run.</p>
+  <div class="grid g6" id="liveTiles"></div>
+  <div class="grid g3" style="margin-top:12px">
+    <div class="card span2"><h3>Time spent per stage, last 5 minutes</h3><p class="note">Seconds of work started in each 10 s bucket, summed over all workers.</p><div class="chart" id="liveStages"></div></div>
+    <div class="card"><h3>Recently finished</h3><p class="note">Newest first.</p><div class="feed" id="feed"><div class="empty">Waiting for runs…</div></div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Worker timeline, last 2 minutes</h3><p class="note">One row per worker process (host:pid). A shared clock: every span's start is stored in UTC, so workers line up.</p><div class="chart short" id="liveGantt"></div></div>
+</section>
+
+<section id="compare">
+  <h2>Compare run groups</h2>
+  <p class="lede">A group is one model + configuration (hash) + normalization, from this database or from a committed export (for example the RTX 3050 runs). Pick up to three; every chart below follows this selection and keeps each group's color.</p>
+  <div class="toolbar"><label><input type="checkbox" id="showDup"> show exports duplicated in this database</label><span id="groupCount" class="muted"></span><button id="refreshBtn" title="Reload per-run data for the selected groups">Reload charts</button></div>
+  <div class="groups" id="groupPicker"><div class="empty">Loading groups…</div></div>
+  <div class="card" style="margin-top:12px"><div class="scroll"><table id="groupTable"></table></div></div>
+</section>
+
+<section id="time">
+  <h2>Where the time goes</h2>
+  <p class="lede">Self time per stage: each span minus its sub-spans, so the segments add up to the run's processing time and nothing is counted twice. Groups recorded before tracing only have prepare / inference / scoring.</p>
+  <div class="grid g2">
+    <div class="card"><h3>Milliseconds per run, by stage</h3><p class="note">Processing time only; queue wait is shown separately in the table.</p><div class="chart" id="stageBars"></div></div>
+    <div class="card"><h3>Per-call durations</h3><p class="note" style="margin:0">Share counts self time; per-call figures include sub-steps.</p><p class="note" id="stageTableNote">First selected group with traced runs.</p><div class="scroll"><table id="stageTable"></table></div></div>
+  </div>
+</section>
+
+<section id="explore">
+  <h2>Linked explorer</h2>
+  <p class="lede">Every dot is one run. Drag a box (or lasso) on any chart to select runs: the same runs light up everywhere, and the table lists them. Click a dot to open that run.</p>
+  <div class="legendbar" data-legend></div>
+  <div class="toolbar"><span id="selInfo">No selection.</span><button id="clearSel">Clear selection</button></div>
+  <div class="grid g2">
+    <div class="card"><h3>Latency vs number of chunks</h3><p class="note">Whisper pads each chunk to a 30 s window, so cost tracks chunks.</p><div class="chart" id="scChunks"></div></div>
+    <div class="card"><h3>Latency vs audio duration</h3><p class="note">Seconds of audio against end-to-end processing seconds.</p><div class="chart" id="scDur"></div></div>
+    <div class="card"><h3>WER vs estimated SNR</h3><p class="note">Signal-to-noise from VAD speech vs non-speech level (dB). Needs audio features. WER axes stop near the 99th percentile.</p><div class="chart" id="scSnr"></div></div>
+    <div class="card"><h3>Encoder vs decoder time per run</h3><p class="note">Traced runs only. Above the diagonal: decoding dominates.</p><div class="chart" id="scEncDec"></div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Selected runs</h3><div class="scroll"><table id="selTable"></table></div></div>
+</section>
+
+<section id="run">
+  <h2>Run detail</h2>
+  <p class="lede" id="runLede">Click a run anywhere on the page.</p>
+  <div class="grid g3">
+    <div class="card span2"><h3>Span timeline</h3><p class="note">Every timed step of the run, nested. Hover for what each step processed (frames, tokens, cache hit…).</p><div class="wf"><div class="chart tall" id="waterfall"></div></div></div>
+    <div class="card"><h3>Facts</h3><div class="kv" id="runFacts"><span class="muted">—</span><span></span></div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Transcript vs reference</h3><p class="note">After normalization-free word comparison: <span class="diff"><span class="del">missing</span> <span class="ins">inserted</span></span>.</p><div class="diff" id="runDiff"><span class="muted">—</span></div></div>
+</section>
+
+<section id="data">
+  <h2>The data</h2>
+  <p class="lede">Distributions of the audio and of what the pipeline made of it, per selected group. Audio features come from scripts/extract_features.py or are computed the first time a file is processed.</p>
+  <div class="legendbar" data-legend></div>
+  <div class="grid g3" id="histGrid"></div>
+</section>
+
+<section id="internals">
+  <h2>Model internals</h2>
+  <p class="lede">What the encoder and decoder did, from the spans around faster-whisper's own steps. Average log-probability is the decoder's confidence; a compression ratio above 2.4 means repetitive output (Whisper's loop check).</p>
+  <div class="legendbar" data-legend></div>
+  <div class="grid g3">
+    <div class="card"><h3>WER vs decoder confidence</h3><p class="note">Mean avg log-prob per run.</p><div class="chart" id="scLogprob"></div></div>
+    <div class="card"><h3>WER vs compression ratio</h3><p class="note">Highest compression ratio of any window in the run.</p><div class="chart" id="scCr"></div></div>
+    <div class="card"><h3>Per-call cost</h3><p class="note">Median milliseconds per call, per group.</p><div class="chart" id="callBars"></div></div>
+  </div>
+</section>
+</main>
+
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("token");
+const api = (path) => "/dashboard/api/" + path + (TOKEN ? (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : "");
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (v, d = 2) => v == null || Number.isNaN(v) ? "—" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (+v).toFixed(d));
+const pct = (v, d = 2) => v == null ? "—" : (100 * v).toFixed(d) + "%";
+const median = (a) => quant(a, 0.5);
+function quant(arr, q) { const v = arr.filter(x => x != null && !Number.isNaN(x)).sort((a, b) => a - b); if (!v.length) return null; const k = (v.length - 1) * q, lo = Math.floor(k), hi = Math.ceil(k); return v[lo] + (v[hi] - v[lo]) * (k - lo); }
+const sum = (a) => a.reduce((s, x) => s + (x || 0), 0);
+
+// ── stage buckets: at most eight colors carry meaning ───────────────────────
+const BUCKETS = [
+  ["prepare", "Prepare (cache, resample, VAD)"], ["audio_io", "Chunk slice + audio decode"], ["features", "Log-mel features"],
+  ["encoder", "Encoder"], ["lang", "Language detection"], ["decoder", "Decoder"], ["score_db", "Scoring + database"], ["other", "Other / untraced"],
+];
+const BUCKET_OF = {
+  "prepare": "prepare", "cache.chunks": "prepare", "cache.resampled": "prepare", "storage.open": "prepare", "resample.build": "prepare",
+  "vad.detect": "prepare", "chunk.plan": "prepare", "chunk.slice": "audio_io", "model.audio_decode": "audio_io",
+  "model.features": "features", "model.encode": "encoder", "model.language_detect": "lang", "model.encode.lang": "lang",
+  "model.decode": "decoder", "score": "score_db", "db.load": "score_db", "db.write": "score_db",
+  "inference": "other", "queue_wait": null,
+};
+const bucketOf = (stage) => stage in BUCKET_OF ? BUCKET_OF[stage] : "other";
+const seriesColor = (i) => css("--s" + (i + 1));
+const STAGE_LABEL = {
+  "queue_wait": "Queue wait", "run": "Run (glue)", "db.load": "DB: load run", "db.write": "DB: write result", "prepare": "Prepare (glue)",
+  "cache.chunks": "Cache: chunk plan", "cache.resampled": "Cache: 16 kHz audio", "storage.open": "Storage: open", "resample.build": "Resample (miss)",
+  "vad.detect": "VAD (miss)", "chunk.plan": "Chunk planning", "transcribe": "Transcribe (glue)", "model.get": "Model lookup / load",
+  "chunk": "Chunk loop (glue)", "chunk.slice": "Chunk slice → WAV", "model.audio_decode": "Audio decode (PyAV)", "model.features": "Log-mel features",
+  "model.encode": "Encoder", "model.language_detect": "Language detection", "model.encode.lang": "Encoder (language detection)",
+  "model.decode": "Decoder", "score": "Scoring", "inference": "Inference (untraced)", "other": "Other",
+};
+const label = (s) => STAGE_LABEL[s] || s;
+
+// ── state ────────────────────────────────────────────────────────────────────
+const S = { groups: [], selected: [], rows: {}, stages: {}, all: [], selection: null, charts: {}, live: { events: [], runs: {}, counts: {}, feed: [] } };
+
+function chart(id) {
+  if (!S.charts[id]) { S.charts[id] = echarts.init($(id), null, { renderer: "canvas" }); }
+  return S.charts[id];
+}
+window.addEventListener("resize", () => Object.values(S.charts).forEach(c => c.resize()));
+
+function baseAxis(extra = {}) {
+  return Object.assign({
+    axisLine: { lineStyle: { color: css("--border") } }, axisTick: { show: false },
+    axisLabel: { color: css("--text-muted"), fontSize: 11 }, splitLine: { lineStyle: { color: css("--grid") } },
+    nameTextStyle: { color: css("--text-secondary"), fontSize: 11 },
+  }, extra);
+}
+function baseOpt(extra = {}) {
+  return Object.assign({
+    animation: false, textStyle: { fontFamily: getComputedStyle(document.body).fontFamily },
+    grid: { left: 52, right: 16, top: 28, bottom: 36, containLabel: false },
+    tooltip: { backgroundColor: css("--surface-1"), borderColor: css("--border"), textStyle: { color: css("--text-primary"), fontSize: 12 }, confine: true },
+    legend: { top: 0, right: 0, textStyle: { color: css("--text-secondary"), fontSize: 11 }, itemWidth: 10, itemHeight: 10, icon: "roundRect" },
+  }, extra);
+}
+function emptyChart(id, msg) {
+  chart(id).setOption({ title: { text: msg, left: "center", top: "middle", textStyle: { color: css("--text-muted"), fontSize: 13, fontWeight: 400 } },
+    xAxis: { show: false }, yAxis: { show: false }, series: [] }, true);
+}
+
+async function getJSON(path) { const r = await fetch(api(path)); if (!r.ok) throw new Error(path + ": " + r.status); return r.json(); }
+
+// ── groups ───────────────────────────────────────────────────────────────────
+async function loadGroups() {
+  S.groups = await getJSON("groups");
+  const visible = visibleGroups();
+  if (!S.selected.length) {
+    // default: newest traced db group first, else the first one
+    const pick = visible.filter(g => g.src === "db" && g.traced).sort((a, b) => (b.last || "").localeCompare(a.last || ""))[0] || visible[0];
+    if (pick) S.selected = [pick.key];
+  }
+  renderPicker();
+  await loadSelected();
+}
+const visibleGroups = () => S.groups.filter(g => !g.duplicate || $("showDup").checked);
+function colorOfGroup(key) { const i = S.selected.indexOf(key); return i < 0 ? css("--neutral") : seriesColor(i); }
+const groupByKey = (k) => S.groups.find(g => g.key === k);
+const shortLabel = (g) => g ? g.label : "?";
+
+function renderPicker() {
+  const vis = visibleGroups();
+  $("groupCount").textContent = `${vis.length} groups · ${S.selected.length}/3 selected`;
+  $("groupPicker").innerHTML = vis.map(g => {
+    const sel = S.selected.includes(g.key);
+    return `<span class="gchip ${sel ? "sel" : ""}" data-key="${esc(g.key)}"><span class="sw" style="background:${sel ? colorOfGroup(g.key) : "transparent"};border:1px solid ${css("--border")}"></span>${esc(g.label)} <small>${g.n} runs${g.src === "export" ? " · export" : ""}${g.traced ? " · traced" : ""}</small></span>`;
+  }).join("") || '<div class="empty">No runs yet.</div>';
+  document.querySelectorAll(".gchip").forEach(el => el.onclick = async () => {
+    const k = el.dataset.key;
+    if (S.selected.includes(k)) S.selected = S.selected.filter(x => x !== k);
+    else { if (S.selected.length >= 3) S.selected.shift(); S.selected.push(k); }
+    renderPicker(); await loadSelected();
+  });
+  renderGroupTable();
+}
+
+function renderLegends() {
+  const html = S.selected.map(k => `<span><span class="sw-inline" style="background:${colorOfGroup(k)}"></span>${esc(shortLabel(groupByKey(k)))}</span>`).join("") || '<span class="muted">No group selected.</span>';
+  document.querySelectorAll("[data-legend]").forEach(el => el.innerHTML = html);
+}
+function renderGroupTable() {
+  renderLegends();
+  const rows = S.selected.map(k => groupByKey(k)).filter(Boolean);
+  const cols = ["Group", "Source", "Runs", "Failed", "WER", "Latency p50 (s)", "p95 (s)", "Inference RTF", "Chunks/run", "Queue p50 (s)", "Encoder share", "Decoder tok/s", "Padding ×"];
+  const body = rows.map(g => {
+    const rs = (S.rows[g.key] || []).filter(r => r.status === "done");
+    const traced = rs.filter(r => r.stages);
+    const proc = sum(traced.map(r => sum(Object.entries(r.stages).filter(([k]) => k !== "queue_wait").map(([, v]) => v))));
+    const enc = sum(traced.map(r => (r.stages["model.encode"] || 0)));
+    return `<tr><td><span class="sw-inline" style="background:${colorOfGroup(g.key)}"></span>${esc(g.label)}</td><td title="${esc(g.file || "")}">${g.src === "db" ? "this DB" : "export"}</td>
+      <td>${g.done}</td><td>${g.failed}</td><td>${pct(g.wer)}</td><td>${fmt(g.latency_p50)}</td><td>${fmt(g.latency_p95)}</td><td>${fmt(g.rtf, 3)}</td>
+      <td>${fmt(mean(rs.map(r => r.n_chunks)))}</td><td>${fmt(median(rs.map(r => r.queue_ms == null ? null : r.queue_ms / 1000)))}</td>
+      <td>${traced.length ? pct(enc / proc, 1) : "—"}</td><td>${fmt(median(rs.map(r => r.tokens_per_s)), 0)}</td><td>${fmt(median(rs.map(r => r.f_padding_ratio)), 1)}</td></tr>`;
+  }).join("");
+  $("groupTable").innerHTML = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">Select a group above.</td></tr>`}</tbody>`;
+}
+function mean(a) { const v = a.filter(x => x != null && !Number.isNaN(x)); return v.length ? sum(v) / v.length : null; }
+
+async function loadSelected() {
+  const need = S.selected.filter(k => !S.rows[k]);
+  if (need.length) {
+    const q = need.map(k => "group=" + encodeURIComponent(k)).join("&");
+    const [rows, stages] = await Promise.all([getJSON("runs?" + q), getJSON("stages?" + q)]);
+    Object.assign(S.rows, rows); Object.assign(S.stages, stages);
+  }
+  S.all = [];
+  S.selected.forEach((k, gi) => (S.rows[k] || []).forEach(r => { r._gi = gi; r._i = S.all.length; S.all.push(r); }));
+  S.selection = null;
+  renderGroupTable(); renderStageBars(); renderStageTable(); renderScatters(); renderSelection(); renderHists(); renderCallBars();
+}
+
+// ── where the time goes ──────────────────────────────────────────────────────
+function renderStageBars() {
+  const groups = S.selected.map(groupByKey).filter(Boolean);
+  if (!groups.length) return emptyChart("stageBars", "Select a group");
+  const perRun = groups.map(g => {
+    const st = S.stages[g.key]; const out = {}; BUCKETS.forEach(([b]) => out[b] = 0);
+    if (!st) return out;
+    st.stages.forEach(s => { const b = bucketOf(s.stage); if (b) out[b] += s.per_run_ms || 0; });
+    return out;
+  });
+  const names = groups.map(g => g.label.split(" · ").slice(0, 2).join(" · ") + (S.stages[g.key]?.basis === "profile" ? " (untraced)" : ""));
+  chart("stageBars").setOption(baseOpt({
+    grid: { left: 16, right: 16, top: 52, bottom: 28, containLabel: true },
+    legend: { top: 0, left: 0, textStyle: { color: css("--text-secondary"), fontSize: 11 }, itemWidth: 10, itemHeight: 10, icon: "roundRect" },
+    tooltip: Object.assign(baseOpt().tooltip, { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: v => fmt(v, 1) + " ms" }),
+    xAxis: baseAxis({ type: "value", name: "ms per run", nameLocation: "end" }),
+    yAxis: baseAxis({ type: "category", data: names, inverse: true, splitLine: { show: false }, axisLabel: { color: css("--text-secondary"), fontSize: 11 } }),
+    series: BUCKETS.map(([b, lab], i) => ({ name: lab, type: "bar", stack: "t", barWidth: 22, data: perRun.map(p => +p[b].toFixed(2)),
+      itemStyle: { color: seriesColor(i), borderColor: css("--surface-1"), borderWidth: 1 }, emphasis: { focus: "series" } })),
+  }), true);
+}
+
+function renderStageTable() {
+  const key = S.selected.find(k => S.stages[k] && S.stages[k].basis === "traced") || S.selected[0];
+  const st = key && S.stages[key];
+  if (!st) { $("stageTable").innerHTML = ""; return; }
+  $("stageTableNote").textContent = `${groupByKey(key)?.label} · ${st.runs} runs · ${st.basis === "traced" ? "from stage events" : "from coarse profile timings"}`;
+  $("stageTable").innerHTML = `<thead><tr><th>Stage</th><th>Share of processing</th><th>ms / run</th><th>Calls</th><th>p50 ms</th><th>p95 ms</th><th>max ms</th></tr></thead><tbody>` +
+    st.stages.map(s => `<tr><td>${esc(label(s.stage))}</td><td>${pct(s.share, 1)}</td><td>${fmt(s.per_run_ms, 1)}</td><td>${s.calls ?? "—"}</td><td>${fmt(s.p50_ms, 1)}</td><td>${fmt(s.p95_ms, 1)}</td><td>${fmt(s.max_ms, 1)}</td></tr>`).join("") + "</tbody>";
+}
+
+// ── linked scatters ──────────────────────────────────────────────────────────
+const SCATTERS = [
+  { id: "scChunks", x: r => r.n_chunks == null ? null : r.n_chunks + (((r._i * 7919) % 100) / 100 - 0.5) * 0.35, y: r => r.latency_s, xn: "chunks (jittered)", yn: "latency (s)" },
+  { id: "scDur", x: r => r.duration_s, y: r => r.latency_s, xn: "audio (s)", yn: "latency (s)" },
+  { id: "scSnr", x: r => r.f_snr_db, y: r => r.wer == null ? null : 100 * r.wer, xn: "SNR (dB)", yn: "WER (%)" },
+  { id: "scEncDec", x: r => r.encoder_ms, y: r => r.decoder_ms, xn: "encoder ms", yn: "decoder ms", diag: true },
+  { id: "scLogprob", x: r => r.avg_logprob, y: r => r.wer == null ? null : 100 * r.wer, xn: "avg log-prob", yn: "WER (%)" },
+  { id: "scCr", x: r => r.max_compression_ratio, y: r => r.wer == null ? null : 100 * r.wer, xn: "max compression ratio", yn: "WER (%)", vline: 2.4 },
+];
+let suppressBrush = false;
+function scatterSeries(sc) {
+  const sel = S.selection;
+  return S.selected.map((k, gi) => {
+    const data = [];
+    for (const r of S.all) {
+      if (r._gi !== gi) continue;
+      const x = sc.x(r), y = sc.y(r);
+      if (x == null || y == null) continue;
+      const on = !sel || sel.has(r._i);
+      data.push({ value: [x, y, r._i], itemStyle: { opacity: on ? 0.7 : 0.06 } });
+    }
+    const n = data.length;
+    return { name: shortLabel(groupByKey(k)), type: "scatter", symbolSize: n > 1500 ? 5 : 7, data, large: false, z: 10 - gi,
+      itemStyle: { color: seriesColor(gi), borderColor: css("--surface-1"), borderWidth: 1 },
+      emphasis: { scale: 1.6, itemStyle: { opacity: 1 } } };
+  });
+}
+function renderScatters() {
+  for (const sc of SCATTERS) {
+    const series = scatterSeries(sc);
+    if (!series.some(s => s.data.length)) { emptyChart(sc.id, sc.id === "scSnr" ? "No audio features yet (run scripts.extract_features)" : "No traced runs in the selection"); continue; }
+    const extras = [];
+    if (sc.diag) { const m = Math.max(...series.flatMap(s => s.data.map(d => Math.max(d.value[0], d.value[1])))); extras.push({ type: "line", silent: true, symbol: "none", data: [[0, 0], [m, m]], lineStyle: { color: css("--neutral"), width: 1 }, tooltip: { show: false } }); }
+    if (sc.vline) series[0].markLine = { silent: true, symbol: "none", label: { formatter: "2.4", color: css("--text-muted") }, lineStyle: { color: css("--critical"), width: 1, type: "solid" }, data: [{ xAxis: sc.vline }] };
+    const c = chart(sc.id);
+    suppressBrush = true;
+    c.setOption(baseOpt({
+      legend: { show: false },
+      grid: { left: 56, right: 16, top: 34, bottom: 40 },
+      toolbox: { right: 8, top: 0, itemSize: 13, iconStyle: { borderColor: css("--text-muted") }, feature: { brush: { type: ["rect", "polygon", "clear"] } } },
+      brush: { toolbox: ["rect", "polygon", "clear"], xAxisIndex: 0, throttleType: "debounce", throttleDelay: 250, brushStyle: { borderWidth: 1, color: "rgba(120,120,120,0.12)", borderColor: css("--text-muted") }, inBrush: { opacity: 1 }, outOfBrush: { opacity: 1 } },
+      tooltip: Object.assign(baseOpt().tooltip, { trigger: "item", formatter: p => p.data?.value ? tip(S.all[p.data.value[2]]) : "" }),
+      xAxis: baseAxis({ type: "value", name: sc.xn, nameLocation: "middle", nameGap: 24, scale: true }),
+      yAxis: baseAxis({ type: "value", name: sc.yn, nameLocation: "middle", nameGap: 40,
+        max: sc.yn.startsWith("WER") ? Math.max(10, Math.ceil(1.15 * (quant(series.flatMap(s => s.data.map(d => d.value[1])), 0.99) || 10) / 10) * 10) : null }),
+      series: [...series, ...extras],
+    }), true);
+    suppressBrush = false;
+    c.off("brushSelected"); c.off("click");
+    c.on("brushSelected", (p) => {
+      if (suppressBrush) return;
+      const b = p.batch && p.batch[0]; if (!b) return;
+      const anyArea = (b.areas || []).length > 0;
+      if (!anyArea) { if (S.selection) { S.selection = null; afterSelection(sc.id); } return; }
+      const ids = new Set();
+      b.selected.forEach(s => { const ser = c.getOption().series[s.seriesIndex]; (s.dataIndex || []).forEach(di => { const d = ser.data[di]; if (d && d.value) ids.add(d.value[2]); }); });
+      S.selection = ids; afterSelection(sc.id);
+    });
+    c.on("click", (p) => { if (p.data && p.data.value && p.data.value.length > 2) openRun(S.all[p.data.value[2]]); });
+  }
+}
+function tip(r) {
+  if (!r) return "";
+  return `<b>${esc(r.utt)}</b> <span style="color:${seriesColor(r._gi)}">●</span><br>` +
+    `latency ${fmt(r.latency_s)} s · audio ${fmt(r.duration_s)} s · chunks ${r.n_chunks ?? "—"}<br>` +
+    `WER ${pct(r.wer, 1)}` + (r.encoder_ms != null ? ` · enc ${fmt(r.encoder_ms, 0)} ms · dec ${fmt(r.decoder_ms, 0)} ms` : "") +
+    (r.f_snr_db != null ? `<br>SNR ${fmt(r.f_snr_db, 1)} dB · speech ${pct(r.f_speech_ratio, 0)}` : "");
+}
+function afterSelection(sourceId) {
+  for (const sc of SCATTERS) {
+    const c = S.charts[sc.id]; if (!c) continue;
+    const series = scatterSeries(sc);
+    suppressBrush = true;
+    c.setOption({ series: series.map(s => ({ data: s.data })) });
+    suppressBrush = false;
+  }
+  renderSelection(); renderHists();
+}
+$("clearSel").onclick = () => { S.selection = null; Object.values(S.charts).forEach(c => { try { c.dispatchAction({ type: "brush", areas: [] }); } catch (e) {} }); afterSelection(); };
+
+let selSort = { key: "latency_s", dir: -1 };
+function renderSelection() {
+  const rows = S.selection ? S.all.filter(r => S.selection.has(r._i)) : [];
+  $("selInfo").textContent = S.selection ? `${rows.length} runs selected · WER ${pct(werOf(rows), 2)} · median latency ${fmt(median(rows.map(r => r.latency_s)))} s · median chunks ${fmt(median(rows.map(r => r.n_chunks)), 0)}` : "No selection: showing the 50 slowest runs.";
+  const list = (S.selection ? rows : S.all.slice()).sort((a, b) => selSort.dir * (((a[selSort.key] ?? -Infinity) > (b[selSort.key] ?? -Infinity)) ? 1 : -1)).slice(0, S.selection ? 500 : 50);
+  const cols = [["utt", "Utterance"], ["latency_s", "Latency s"], ["duration_s", "Audio s"], ["n_chunks", "Chunks"], ["wer", "WER"], ["encoder_ms", "Encoder ms"], ["decoder_ms", "Decoder ms"], ["tokens", "Tokens"], ["avg_logprob", "Log-prob"], ["f_snr_db", "SNR dB"], ["longest_repeat", "Repeat"]];
+  $("selTable").innerHTML = `<thead><tr>${cols.map(([k, n]) => `<th class="sortable" data-k="${k}">${n}${selSort.key === k ? (selSort.dir < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead><tbody>` +
+    list.map(r => `<tr class="click" data-i="${r._i}"><td><span class="sw-inline" style="background:${seriesColor(r._gi)}"></span>${esc(r.utt)}</td><td>${fmt(r.latency_s)}</td><td>${fmt(r.duration_s)}</td><td>${r.n_chunks ?? "—"}</td><td>${pct(r.wer, 1)}</td><td>${fmt(r.encoder_ms, 0)}</td><td>${fmt(r.decoder_ms, 0)}</td><td>${r.tokens ?? "—"}</td><td>${fmt(r.avg_logprob)}</td><td>${fmt(r.f_snr_db, 1)}</td><td>${r.longest_repeat ?? "—"}</td></tr>`).join("") + "</tbody>";
+  document.querySelectorAll("#selTable th.sortable").forEach(th => th.onclick = () => { const k = th.dataset.k; selSort = { key: k, dir: selSort.key === k ? -selSort.dir : -1 }; renderSelection(); });
+  document.querySelectorAll("#selTable tr.click").forEach(tr => tr.onclick = () => openRun(S.all[+tr.dataset.i]));
+}
+const werOf = (rows) => { const rw = sum(rows.map(r => r.ref_words)); return rw ? sum(rows.map(r => r.errors)) / rw : null; };
+
+// ── histograms (the data) ────────────────────────────────────────────────────
+const HISTS = [
+  ["duration_s", "Audio duration (s)", r => r.duration_s], ["n_chunks", "Chunks per file", r => r.n_chunks, true],
+  ["f_padding_ratio", "Padding: 30 s windows ÷ audio", r => r.f_padding_ratio], ["f_speech_ratio", "Speech ratio (VAD)", r => r.f_speech_ratio],
+  ["f_snr_db", "Estimated SNR (dB)", r => r.f_snr_db], ["wer", "WER per file (%)", r => r.wer == null ? null : 100 * r.wer],
+];
+function renderHists() {
+  const grid = $("histGrid");
+  if (!grid.children.length) grid.innerHTML = HISTS.map(([k, t]) => `<div class="card"><h3>${t}</h3><div class="chart short" id="h_${k}"></div></div>`).join("");
+  for (const [k, t, f, integer] of HISTS) {
+    const id = "h_" + k;
+    const base = S.selection ? S.all.filter(r => S.selection.has(r._i)) : S.all;
+    const vals = base.map(f).filter(v => v != null && !Number.isNaN(v));
+    if (!vals.length) { emptyChart(id, k.startsWith("f_") ? "No audio features yet" : "No data"); continue; }
+    let lo = quant(vals, 0), hi = quant(vals, 0.99); if (hi <= lo) hi = lo + 1;
+    let nb = integer ? Math.min(Math.round(hi - lo) + 1, 30) : 24; const w = integer ? 1 : (hi - lo) / nb; if (integer) lo = Math.floor(lo);
+    const labels = Array.from({ length: nb }, (_, i) => integer ? String(lo + i) : fmt(lo + i * w, w < 1 ? 2 : 1));
+    const series = S.selected.map((key, gi) => {
+      const counts = new Array(nb).fill(0);
+      base.filter(r => r._gi === gi).map(f).forEach(v => { if (v == null || Number.isNaN(v)) return; let b = Math.floor((v - lo) / w); b = Math.max(0, Math.min(nb - 1, b)); counts[b]++; });
+      const tot = sum(counts) || 1;
+      return { name: shortLabel(groupByKey(key)), type: "bar", data: counts.map(c => +(100 * c / tot).toFixed(2)), barGap: "10%", itemStyle: { color: seriesColor(gi), borderRadius: [3, 3, 0, 0] } };
+    });
+    chart(id).setOption(baseOpt({ legend: { show: false }, grid: { left: 40, right: 8, top: 12, bottom: 28 },
+      tooltip: Object.assign(baseOpt().tooltip, { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: v => fmt(v, 1) + "% of files" }),
+      xAxis: baseAxis({ type: "category", data: labels, splitLine: { show: false } }), yAxis: baseAxis({ type: "value", name: "% of files" }), series }), true);
+  }
+}
+
+function renderCallBars() {
+  const stagesShown = ["model.features", "model.encode", "model.encode.lang", "model.decode", "chunk.slice", "model.audio_decode", "vad.detect", "score"];
+  const groups = S.selected.filter(k => S.stages[k] && S.stages[k].basis === "traced");
+  if (!groups.length) return emptyChart("callBars", "No traced groups selected");
+  chart("callBars").setOption(baseOpt({
+    grid: { left: 8, right: 16, top: 28, bottom: 24, containLabel: true },
+    tooltip: Object.assign(baseOpt().tooltip, { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: v => fmt(v, 1) + " ms" }),
+    legend: { show: false },
+    xAxis: baseAxis({ type: "value", name: "p50 ms per call" }),
+    yAxis: baseAxis({ type: "category", inverse: true, data: stagesShown.map(label), splitLine: { show: false }, axisLabel: { color: css("--text-secondary"), fontSize: 11 } }),
+    series: groups.map(k => ({ name: shortLabel(groupByKey(k)), type: "bar", barMaxWidth: 12,
+      itemStyle: { color: colorOfGroup(k), borderRadius: [0, 3, 3, 0] },
+      data: stagesShown.map(s => (S.stages[k].stages.find(x => x.stage === s) || {}).p50_ms ?? null) })),
+  }), true);
+}
+
+// ── run detail ───────────────────────────────────────────────────────────────
+async function openRun(r) {
+  if (!r) return;
+  location.hash = "#run";
+  $("runLede").innerHTML = `<b>${esc(r.utt)}</b> · ${esc(groupByKey(r.group)?.label || "")}`;
+  let d = null;
+  if (r.group.startsWith("db|")) { try { d = await getJSON("run/" + encodeURIComponent(r.id)); } catch (e) { d = null; } }
+  renderFacts(r, d);
+  renderWaterfall(d);
+  $("runDiff").innerHTML = d && d.reference != null ? wordDiff(d.reference, d.transcript || "") : '<span class="muted">Transcripts are only available for runs in this database.</span>';
+}
+function renderFacts(r, d) {
+  const f = (d && d.features) || {};
+  const p = (d && d.profile) || {};
+  const kv = [
+    ["Status", r.status], ["WER", pct(r.wer, 2)], ["Latency", fmt(r.latency_s) + " s"], ["Audio", fmt(r.duration_s) + " s"], ["Chunks", r.n_chunks ?? "—"],
+    ["Encoder calls", r.encoder_calls ?? "—"], ["Language detect calls", r.lang_calls ?? "—"], ["Decoder tokens", r.tokens ?? "—"], ["Tokens / s", fmt(r.tokens_per_s, 0)],
+    ["Avg log-prob", fmt(r.avg_logprob)], ["Max compression", fmt(r.max_compression_ratio)], ["Longest repeat", r.longest_repeat ?? "—"],
+    ["Model cold load", r.model_cold ? "yes" : "no"], ["Queue wait", r.queue_ms == null ? "—" : fmt(r.queue_ms / 1000) + " s"],
+    ["SNR", f.snr_db == null ? "—" : fmt(f.snr_db, 1) + " dB"], ["Speech ratio", pct(f.speech_ratio, 0)], ["Level", f.rms_dbfs == null ? "—" : fmt(f.rms_dbfs, 1) + " dBFS"],
+    ["Spectral centroid", f.spectral_centroid_hz == null ? "—" : fmt(f.spectral_centroid_hz, 0) + " Hz"], ["Padding ×", fmt(f.padding_ratio, 1)],
+    ["Device", (p.runtime || {}).device ?? "—"], ["Peak RSS", (p.runtime || {}).peak_rss_mb == null ? "—" : fmt(p.runtime.peak_rss_mb, 0) + " MB"],
+  ];
+  $("runFacts").innerHTML = kv.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join("");
+}
+function renderWaterfall(d) {
+  if (!d || !d.events || !d.events.length) return emptyChart("waterfall", d ? "This run has no stage events (recorded before tracing)" : "Span timelines exist only for runs in this database");
+  const evs = d.events.filter(e => e.stage !== "queue_wait");
+  const t0 = Math.min(...evs.map(e => Date.parse(e.started_at)));
+  const bySeq = Object.fromEntries(d.events.map(e => [e.seq, e]));
+  const depth = (e) => { let n = 0, p = e.parent_seq; while (p != null && bySeq[p]) { n++; p = bySeq[p].parent_seq; } return n; };
+  const shown = evs.slice(0, 400);
+  $("waterfall").style.height = Math.max(240, shown.length * 17 + 60) + "px"; chart("waterfall").resize();
+  const cats = shown.map(e => "  ".repeat(depth(e)) + label(e.stage === "model.encode" && bySeq[e.parent_seq]?.stage === "model.language_detect" ? "model.encode.lang" : e.stage) + (e.attrs && e.attrs.index != null ? " " + e.attrs.index : ""));
+  const data = shown.map((e, i) => {
+    const s = Date.parse(e.started_at) - t0; const stage = e.stage === "model.encode" && bySeq[e.parent_seq]?.stage === "model.language_detect" ? "model.encode.lang" : e.stage;
+    const b = bucketOf(stage); const bi = BUCKETS.findIndex(x => x[0] === b);
+    const isGlue = ["run", "transcribe", "chunk", "prepare"].includes(e.stage);
+    return { value: [i, s, s + Math.max(e.duration_ms, 0.05), e.duration_ms], ev: e, itemStyle: { color: isGlue ? css("--neutral") : seriesColor(Math.max(bi, 0)) } };
+  });
+  chart("waterfall").setOption(baseOpt({
+    legend: { show: false }, grid: { left: 8, right: 16, top: 8, bottom: 30, containLabel: true },
+    tooltip: Object.assign(baseOpt().tooltip, { formatter: p => { const e = p.data.ev; return `<b>${esc(label(e.stage))}</b><br>${fmt(e.duration_ms, 2)} ms · starts +${fmt(p.data.value[1], 1)} ms` + (e.attrs ? "<br>" + Object.entries(e.attrs).map(([k, v]) => `${esc(k)}: ${esc(typeof v === "number" ? fmt(v, 3) : v)}`).join("<br>") : ""); } }),
+    xAxis: baseAxis({ type: "value", name: "ms since start", nameLocation: "middle", nameGap: 22 }),
+    yAxis: baseAxis({ type: "category", data: cats, inverse: true, splitLine: { show: false }, axisLabel: { color: css("--text-secondary"), fontSize: 10.5, interval: 0 } }),
+    dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
+    series: [{ type: "custom", encode: { x: [1, 2], y: 0 }, data, renderItem: (params, api) => {
+      const y = api.value(0), s = api.coord([api.value(1), y]), e = api.coord([api.value(2), y]), h = api.size([0, 1])[1] * 0.62;
+      const rect = echarts.graphic.clipRectByRect({ x: s[0], y: s[1] - h / 2, width: Math.max(e[0] - s[0], 1.5), height: h },
+        { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height });
+      return rect && { type: "rect", shape: Object.assign(rect, { r: 2 }), style: api.style() };
+    } }],
+  }), true);
+}
+function wordDiff(ref, hyp) {
+  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").split(/\s+/).filter(Boolean);
+  const a = norm(ref).slice(0, 600), b = norm(hyp).slice(0, 600);
+  const n = a.length, m = b.length, L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) { if (a[i] === b[j]) { out.push(esc(a[i])); i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) { out.push(`<span class="del">${esc(a[i])}</span>`); i++; } else { out.push(`<span class="ins">${esc(b[j])}</span>`); j++; } }
+  while (i < n) out.push(`<span class="del">${esc(a[i++])}</span>`);
+  while (j < m) out.push(`<span class="ins">${esc(b[j++])}</span>`);
+  return out.join(" ");
+}
+
+// ── live feed (server-sent events) ───────────────────────────────────────────
+const LEAF = new Set(["queue_wait", "cache.chunks", "cache.resampled", "storage.open", "resample.build", "vad.detect", "chunk.plan", "chunk.slice", "model.audio_decode", "model.features", "model.encode", "model.decode", "score", "db.load", "db.write"]);
+function startLive() {
+  const es = new EventSource(api("stream"));
+  es.onopen = () => { $("liveDot").classList.add("on"); $("liveText").textContent = "live"; };
+  es.onerror = () => { $("liveDot").classList.remove("on"); $("liveText").textContent = "reconnecting…"; };
+  es.onmessage = (m) => {
+    const p = JSON.parse(m.data);
+    const L = S.live; L.counts = p.counts; L.now = Date.parse(p.now);
+    Object.assign(L.runs, p.runs);
+    for (const e of p.events) { e.t0 = Date.parse(e.t); L.events.push(e); if (e.stage === "run") L.feed.unshift(e); }
+    const cutoff = L.now - 10 * 60 * 1000;
+    L.events = L.events.filter(e => e.t0 >= cutoff); L.feed = L.feed.slice(0, 60);
+    if (p.events.some(e => e.stage === "run")) { scheduleGroupRefresh(); }
+    renderLive();
+  };
+}
+let refreshTimer = null;
+function scheduleGroupRefresh() {
+  if (refreshTimer) return;
+  // Counts refresh quietly; per-run rows reload only on request, so an exploration in progress is not reset.
+  refreshTimer = setTimeout(async () => { refreshTimer = null; S.groups = await getJSON("groups"); renderPicker();
+    if (S.selected.some(k => k.startsWith("db|"))) $("refreshBtn").textContent = "New runs: reload charts"; }, 10000);
+}
+function renderLive() {
+  const L = S.live, now = L.now || Date.now();
+  const runs60 = L.events.filter(e => e.stage === "run" && e.t0 + e.ms >= now - 60000);
+  const lat60 = runs60.map(e => e.ms / 1000);
+  const tiles = [["Queued", L.counts.queued ?? 0, "waiting for a worker"], ["Processing", L.counts.processing ?? 0, "claimed by a worker"],
+    ["Done", (L.counts.done ?? 0).toLocaleString(), "all time"], ["Failed", (L.counts.failed ?? 0).toLocaleString(), "all time"],
+    ["Runs / min", runs60.length, "finished in the last 60 s"], ["Median run time", lat60.length ? fmt(median(lat60)) + " s" : "—", "last 60 s, worker time"]];
+  $("liveTiles").innerHTML = tiles.map(([l, v, h]) => `<div class="card tile"><div class="label">${l}</div><div class="value">${v}</div><div class="hint">${h}</div></div>`).join("");
+  // stacked time per 10 s bucket
+  const span = 5 * 60 * 1000, step = 10000, start = Math.floor((now - span) / step) * step, nb = Math.ceil(span / step) + 1;
+  const buckets = {}; [["queue", "Queue wait"], ...BUCKETS].forEach(([b]) => buckets[b] = new Array(nb).fill(0));
+  for (const e of L.events) {
+    if (!LEAF.has(e.stage) || e.t0 < start) continue;
+    const i = Math.min(nb - 1, Math.floor((e.t0 - start) / step)); const b = e.stage === "queue_wait" ? null : bucketOf(e.stage);
+    if (b) buckets[b][i] += e.ms / 1000;
+  }
+  const xs = Array.from({ length: nb }, (_, i) => new Date(start + i * step).toLocaleTimeString([], { hour12: false }));
+  chart("liveStages").setOption(baseOpt({
+    grid: { left: 44, right: 12, top: 52, bottom: 28 },
+    legend: { top: 0, left: 0, textStyle: { color: css("--text-secondary"), fontSize: 11 }, itemWidth: 10, itemHeight: 10, icon: "roundRect" },
+    tooltip: Object.assign(baseOpt().tooltip, { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: v => fmt(v, 2) + " s" }),
+    xAxis: baseAxis({ type: "category", data: xs, splitLine: { show: false }, axisLabel: { color: css("--text-muted"), fontSize: 10, interval: 5 } }),
+    yAxis: baseAxis({ type: "value", name: "s of work" }),
+    series: BUCKETS.filter(([b]) => b !== "other").map(([b, lab]) => ({ name: lab, type: "bar", stack: "t", data: buckets[b].map(v => +v.toFixed(3)),
+      itemStyle: { color: seriesColor(BUCKETS.findIndex(x => x[0] === b)), borderColor: css("--surface-1"), borderWidth: 0.5 } })),
+  }), true);
+  // feed
+  $("feed").innerHTML = L.feed.length ? L.feed.slice(0, 40).map(e => { const r = L.runs[e.run_id] || {};
+    return `<div class="click" data-run="${esc(e.run_id)}"><span class="t">${new Date(e.t0 + e.ms).toLocaleTimeString([], { hour12: false })}</span><span class="u">${esc((r.model || "").replace("faster-whisper-", ""))} · ${fmt(r.duration_s, 1)} s audio</span><span>${fmt(e.ms / 1000)} s</span><span style="width:56px;text-align:right">${r.wer == null ? "—" : pct(r.wer, 1)}</span></div>`; }).join("") : '<div class="empty">Waiting for runs…</div>';
+  document.querySelectorAll("#feed [data-run]").forEach(el => el.onclick = () => openRunById(el.dataset.run));
+  // worker gantt
+  const g0 = now - 2 * 60 * 1000;
+  const runEvs = L.events.filter(e => e.stage === "run" && e.t0 + e.ms >= g0);
+  const workers = [...new Set(runEvs.map(e => e.worker))].sort();
+  const models = [...new Set(runEvs.map(e => (L.runs[e.run_id] || {}).model || "?"))].sort();
+  if (!runEvs.length) { emptyChart("liveGantt", "No runs in the last 2 minutes"); return; }
+  chart("liveGantt").setOption(baseOpt({
+    legend: { top: 0, right: 0, data: models.slice(0, 3), textStyle: { color: css("--text-secondary"), fontSize: 11 } },
+    grid: { left: 8, right: 16, top: 26, bottom: 26, containLabel: true },
+    tooltip: Object.assign(baseOpt().tooltip, { formatter: p => { const e = p.data.ev, r = L.runs[e.run_id] || {}; return `<b>${esc(r.model || "")}</b><br>${fmt(e.ms / 1000)} s · audio ${fmt(r.duration_s, 1)} s<br>WER ${pct(r.wer, 1)}<br>${esc(e.worker)}`; } }),
+    xAxis: baseAxis({ type: "time", min: g0, max: now }),
+    yAxis: baseAxis({ type: "category", data: workers, splitLine: { show: false }, axisLabel: { color: css("--text-secondary"), fontSize: 10.5 } }),
+    series: models.slice(0, 3).map((mname, mi) => ({ name: mname, type: "custom", encode: { x: [1, 2], y: 0 },
+      itemStyle: { color: seriesColor(mi) },
+      data: runEvs.filter(e => ((L.runs[e.run_id] || {}).model || "?") === mname).map(e => ({ value: [workers.indexOf(e.worker), e.t0, e.t0 + e.ms], ev: e })),
+      renderItem: (params, api) => { const y = api.value(0), s = api.coord([api.value(1), y]), e = api.coord([api.value(2), y]), h = api.size([0, 1])[1] * 0.55;
+        const rect = echarts.graphic.clipRectByRect({ x: s[0], y: s[1] - h / 2, width: Math.max(e[0] - s[0] - 1, 1.5), height: h }, { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height });
+        return rect && { type: "rect", shape: Object.assign(rect, { r: 2 }), style: api.style() }; } })),
+  }), true);
+  chart("liveGantt").off("click"); chart("liveGantt").on("click", p => p.data && p.data.ev && openRunById(p.data.ev.run_id));
+}
+function openRunById(id) {
+  const r = S.all.find(x => x.id === id);
+  if (r) return openRun(r);
+  const lr = S.live.runs[id] || {};
+  const key = S.groups.find(g => g.src === "db" && g.model === lr.model && g.config_hash === lr.config_hash)?.key || "db|";
+  openRun({ id, group: key.startsWith("db|") ? key : "db|", utt: id.slice(0, 8), status: lr.status, wer: lr.wer, latency_s: lr.latency_s, duration_s: lr.duration_s });
+}
+
+// ── theme ────────────────────────────────────────────────────────────────────
+$("themeBtn").onclick = () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
+  try { localStorage.setItem("asr-theme", document.documentElement.dataset.theme); } catch (e) {}
+  Object.values(S.charts).forEach(c => c.dispose()); S.charts = {};
+  renderPicker(); renderStageBars(); renderStageTable(); renderScatters(); renderSelection(); renderHists(); renderCallBars(); renderLive();
+};
+try { const t = localStorage.getItem("asr-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$("showDup").onchange = () => renderPicker();
+$("refreshBtn").onclick = async () => {
+  S.selected.forEach(k => { if (k.startsWith("db|")) { delete S.rows[k]; delete S.stages[k]; } });
+  S.groups = await getJSON("groups"); S.selected = S.selected.filter(k => groupByKey(k));
+  $("refreshBtn").textContent = "Reload charts"; renderPicker(); await loadSelected();
+};
+
+loadGroups().catch(e => { $("groupPicker").innerHTML = `<div class="empty">Could not load groups: ${esc(e.message)}</div>`; });
+startLive();
+</script>
+</body>
+</html>

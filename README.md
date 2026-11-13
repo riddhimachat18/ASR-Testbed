@@ -50,6 +50,36 @@ GPU machine: see [docs/GPU.md](docs/GPU.md) (`ASR_ENV_FILE=.env.gpu`, `DEVICE=cu
 Rules: compare WER only under one normalization; compare speed only at equal worker concurrency; claim a
 difference only when the paired-bootstrap interval excludes zero.
 
+## Dashboard and tracing
+
+Open **http://localhost:8000/dashboard** while the API is running. It shows, side by side for up to three run
+groups (from this database or from committed exports such as the RTX 3050 runs):
+
+- **Live pipeline:** queue counts, runs per minute, seconds of work per stage every 10 s, a timeline of runs per
+  worker process, and the latest finished runs. Updated every second (server-sent events).
+- **Where the time goes:** self time per stage (prepare, chunk slicing, audio decode, log-mel features,
+  encoder, language detection, decoder, scoring, database) and per-call p50 / p95.
+- **Linked explorer:** latency vs chunks, latency vs duration, WER vs SNR, encoder vs decoder time. Select runs
+  in one chart and they light up in all of them; click a run for its span timeline and transcript diff.
+- **Data and model internals:** distributions of duration, chunks, padding, speech ratio, SNR and WER; WER
+  against decoder confidence and compression ratio; median cost per call.
+
+Where the numbers come from:
+
+- Every run attempt is traced (`app/observability/tracing.py`): each step is a timed span, nested, with what it
+  processed (cache hit, frames, tokens, log-prob). Spans are stored in `stage_events` when the run finishes.
+- faster-whisper's internals are timed by wrapping its own methods at model load (`instrument_model` in
+  `app/pipeline/faster_whisper_wrapper.py`): audio decode, log-mel features, each encoder call, language
+  detection, each decoder call. Inputs and outputs pass through unchanged.
+- Audio features (`audio_features` table): level, clipping, speech ratio, estimated SNR, spectral centroid,
+  chunks and padding. Computed the first time a file is processed, outside the measured latency. For files
+  processed before tracing: `python -m scripts.extract_features --dataset librispeech-test-clean`.
+
+After pulling: `alembic upgrade head` (migration 0006), then restart the API and the worker. Runs made before
+this have no stage events; the dashboard shows them with coarse timings (prepare / inference / scoring).
+The dashboard shows transcripts: set `DASHBOARD_TOKEN` (and open `/dashboard?token=...`) or
+`DASHBOARD_ENABLED=false` on any machine others can reach.
+
 ## Quick API check
 
     curl -H "X-API-Key: $KEY" -F file=@sample.wav -F model_version=faster-whisper-tiny localhost:8000/audio
@@ -69,8 +99,10 @@ difference only when the paired-bootstrap interval excludes zero.
     app/pipeline      ModelWrapper interface, stub and faster-whisper models, registry, Silero VAD,
                       derived cache, worker (with per-run profile), queues
     app/evaluation    WER/CER with versioned normalization (whisper_norm/ is vendored), leaderboard, summaries
-    scripts           import, baseline, report, evaluate, export, compare, rotate_keys, recovery
-    migrations        Alembic (0001 to 0005)
+    scripts           import, baseline, report, evaluate, export, compare, extract_features, rotate_keys, recovery
+    app/dashboard     dashboard page (static/index.html, ECharts vendored) and its read-only JSON API
+    app/observability logging, /metrics, per-run tracing (tracing.py)
+    migrations        Alembic (0001 to 0006)
     results           measured baselines, exports, comparisons (see results/README.md)
 
 ## Decisions made while implementing

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.config import Settings, get_settings
+from app.dashboard.routes import router as dashboard_router
 from app.observability.logging import configure_logging
 from app.observability.middleware import RequestLogMiddleware
 from app.pipeline.queues import build_queue
@@ -33,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.registry, app.state.queue = rt.registry, queue
     app.add_middleware(RequestLogMiddleware)
     app.include_router(router)
+    app.include_router(dashboard_router)
     return app
 
 

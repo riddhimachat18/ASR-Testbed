@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "json"
     metrics_token: str | None = None  # if set, /metrics requires "Authorization: Bearer <token>"
+    # Dashboard (/dashboard): read-only views of runs, stage timings and audio features. It shows transcripts, so
+    # set DASHBOARD_TOKEN (then open /dashboard?token=...) or disable it on any machine reachable by others.
+    dashboard_enabled: bool = True
+    dashboard_token: str | None = None
+    dashboard_exports_dir: str = "results/exports"  # committed exports (e.g. GPU runs) shown next to live data
 
     # --- recovery sweep ---
     recovery_interval_s: int = 120  # 0 disables the background sweep

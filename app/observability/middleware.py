@@ -39,6 +39,7 @@ class RequestLogMiddleware:
             run_id = (scope.get("path_params") or {}).get("run_id")
             if run_id:
                 fields["run_id"] = run_id
-            level = logging.DEBUG if scope["path"] in _QUIET_PATHS else logging.INFO
+            quiet = scope["path"] in _QUIET_PATHS or scope["path"].startswith("/dashboard")  # polled every second
+            level = logging.DEBUG if quiet else logging.INFO
             log_event(log, "http.request", level=level, **fields)
             _ctx.reset(token)

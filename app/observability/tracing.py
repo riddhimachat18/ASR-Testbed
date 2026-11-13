@@ -79,11 +79,33 @@ class Trace:
         return out
 
     def summary(self) -> dict[str, float]:
-        """Total seconds per stage name (for the run profile)."""
-        totals: dict[str, float] = {}
-        for r in self.rows():
-            totals[r["stage"]] = round(totals.get(r["stage"], 0.0) + r["duration_ms"] / 1000.0, 6)
-        return totals
+        """Self time in seconds per stage category (see self_times), stored in the run profile so that exports
+        carry the breakdown too."""
+        return {k: round(v / 1000.0, 6) for k, v in self_times(self.rows()).items()}
+
+
+def stage_category(stage: str, parent_stage: str | None) -> str:
+    """The encoder call made by language detection is reported apart from the transcription encoder calls."""
+    if stage == "model.encode" and parent_stage == "model.language_detect":
+        return "model.encode.lang"
+    return stage
+
+
+def self_times(rows: list[dict]) -> dict[str, float]:
+    """Milliseconds per stage category, counting each span minus its children ("self time"), so the values add
+    up to the run's wall time (plus queue wait) with nothing counted twice. A parent's self time is work no finer
+    span explains: Python glue, generator overhead, I/O between steps."""
+    by_seq = {r["seq"]: r for r in rows}
+    child_ms: dict[int, float] = {}
+    for r in rows:
+        if r["parent_seq"] is not None:
+            child_ms[r["parent_seq"]] = child_ms.get(r["parent_seq"], 0.0) + r["duration_ms"]
+    out: dict[str, float] = {}
+    for r in rows:
+        parent = by_seq.get(r["parent_seq"]) if r["parent_seq"] is not None else None
+        cat = stage_category(r["stage"], parent["stage"] if parent else None)
+        out[cat] = out.get(cat, 0.0) + max(r["duration_ms"] - child_ms.get(r["seq"], 0.0), 0.0)
+    return out
 
 
 def _jsonable(attrs: dict) -> dict:

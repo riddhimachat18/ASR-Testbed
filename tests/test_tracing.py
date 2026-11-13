@@ -50,10 +50,27 @@ def test_span_is_a_noop_outside_a_run():
 
 # ── a whole run ───────────────────────────────────────────────────────────────
 def _events(client, run_id) -> list[StageEvent]:
-    with client.app.state.session_factory() as s:
-        rows = list(s.scalars(select(StageEvent).where(StageEvent.run_id == run_id).order_by(StageEvent.seq)))
-        s.expunge_all()
-        return rows
+    """Events are written just after the run's status, so poll briefly."""
+    end = time.time() + 3
+    while True:
+        with client.app.state.session_factory() as s:
+            rows = list(s.scalars(select(StageEvent).where(StageEvent.run_id == run_id).order_by(StageEvent.seq)))
+            s.expunge_all()
+        if any(r.stage == "run" for r in rows) or time.time() > end:
+            return rows
+        time.sleep(0.02)
+
+
+def _features(client, audio_id):
+    end = time.time() + 3
+    while True:
+        with client.app.state.session_factory() as s:
+            f = s.get(AudioFeatures, audio_id)
+            if f is not None or time.time() > end:
+                if f is not None:
+                    s.expunge(f)
+                return f
+        time.sleep(0.02)
 
 
 def test_a_done_run_leaves_nested_stage_events(client, make_user):
@@ -91,14 +108,18 @@ def test_audio_features_are_computed_once_per_file(client, make_user):
     _wait_done(client, key, sub["run_id"])
     with client.app.state.session_factory() as s:
         audio_id = s.get(TranscriptionRun, sub["run_id"]).audio_id
-        f = s.get(AudioFeatures, audio_id)
-        assert f is not None and f.duration_s > 0 and f.n_chunks >= 1 and f.rms_dbfs < 0
-        assert f.speech_ratio is None  # fixed chunking: no VAD, no speech estimate
-        first = f.computed_at
+    f = _features(client, audio_id)
+    assert f is not None and f.duration_s > 0 and f.n_chunks >= 1 and f.rms_dbfs < 0
+    assert f.speech_ratio is None  # fixed chunking: no VAD, no speech estimate
+    first = f.computed_at
     sub2 = _post(client, key, model_version="stub-prepared", config=FIXED)
     _wait_done(client, key, sub2["run_id"])
+    _events(client, sub2["run_id"])  # the second run has finished its post-processing
+    time.sleep(0.1)
     with client.app.state.session_factory() as s:
+        audio2 = s.get(TranscriptionRun, sub2["run_id"]).audio_id
         assert s.get(AudioFeatures, audio_id).computed_at == first
+        assert s.get(AudioFeatures, audio2) is not None or audio2 != audio_id
 
 
 # ── audio features ────────────────────────────────────────────────────────────
