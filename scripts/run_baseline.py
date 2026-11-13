@@ -72,6 +72,8 @@ def dataset_audio_ids(s, dataset: str, limit: int | None) -> list[str]:
         sys.exit(f"dataset {dataset!r} not found; import it first (scripts/import_librispeech.py)")
     ids = list(s.scalars(select(Audio.id).join(ReferenceTranscript, ReferenceTranscript.audio_id == Audio.id)
                          .where(Audio.dataset_id == ds.id).order_by(Audio.external_id, Audio.id)))
+    if not ids:
+        sys.exit(f"dataset {dataset!r} has no audio with a reference transcript; import it first")
     return ids[:limit] if limit else ids
 
 

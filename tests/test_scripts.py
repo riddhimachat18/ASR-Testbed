@@ -75,6 +75,24 @@ def test_import_sets_utterance_ids_and_is_idempotent(sf_, tmp_path):
         assert sorted(s.scalars(select(Audio.external_id))) == ["1089-134686-0000", "1089-134686-0001"]
 
 
+def test_the_same_files_in_another_dataset_get_their_own_rows(sf_, tmp_path):
+    """A profiling subset is its own dataset: same audio, new rows (and so fresh runs), shared derived cache."""
+    split = _fake_split(tmp_path, {"1089-134686-0000": "HELLO WORLD", "1089-134686-0001": "TEN APPLES"})
+    storage, uid = LocalDiskStorage(str(tmp_path / "blobs")), _owner(sf_)
+    import_librispeech.import_split(sf_, storage, split, "librispeech-test-clean", uid)
+    sub = import_librispeech.import_split(sf_, storage, split, "librispeech-profile", uid, limit=1)
+    assert (sub["imported"], sub["skipped"]) == (1, 0)
+    with sf_() as s:
+        rows = s.execute(select(Dataset.name, Audio.external_id, Audio.checksum)
+                         .join(Dataset, Dataset.id == Audio.dataset_id)).all()
+    by_ds = {}
+    for name, utt, checksum in rows:
+        by_ds.setdefault(name, {})[utt] = checksum
+    assert len(by_ds["librispeech-test-clean"]) == 2 and len(by_ds["librispeech-profile"]) == 1
+    utt, checksum = next(iter(by_ds["librispeech-profile"].items()))
+    assert by_ds["librispeech-test-clean"][utt] == checksum
+
+
 def test_reimport_backfills_missing_utterance_ids(sf_, tmp_path):
     split = _fake_split(tmp_path, {"1089-134686-0000": "HELLO WORLD", "1089-134686-0001": "TEN APPLES"})
     storage, uid = LocalDiskStorage(str(tmp_path / "blobs")), _owner(sf_)

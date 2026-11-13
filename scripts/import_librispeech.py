@@ -102,14 +102,17 @@ def get_or_create_dataset(s, user_id: str, name: str) -> Dataset:
 
 
 def find_existing(s, dataset_id: str, checksum: str, ref_text: str, duration: float) -> Audio | None:
-    """The already-imported row for this file: by checksum (preferring this dataset), else, for rows without an
-    external_id in this dataset, by identical reference text and duration."""
+    """The already-imported row for this file IN THIS DATASET: by checksum (a row with no dataset yet is claimed
+    for this one), else, for rows without an external_id in this dataset, by identical reference text and
+    duration. A copy in another dataset is not a match: each dataset has its own audio rows (and so its own
+    runs), e.g. a profiling subset of test-clean. They share the stored derived artifacts, keyed by checksum."""
     rows = s.scalars(select(Audio).where(Audio.checksum == checksum)).all()
     for a in rows:
         if a.dataset_id == dataset_id:
             return a
-    if rows:
-        return rows[0]
+    for a in rows:
+        if a.dataset_id is None:
+            return a
     candidates = s.scalars(
         select(Audio).join(ReferenceTranscript, ReferenceTranscript.audio_id == Audio.id)
         .where(Audio.dataset_id == dataset_id, Audio.external_id.is_(None), ReferenceTranscript.text == ref_text)
